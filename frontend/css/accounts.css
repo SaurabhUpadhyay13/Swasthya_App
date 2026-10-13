@@ -1,0 +1,35 @@
+/* OPD staff desk and patient portal. Uses the tokens from styles.css. */
+
+.acc-login { max-width: 440px; margin: 24px auto 0; padding: 28px; display: grid; gap: 4px; }
+.acc-login .muted { margin-bottom: 14px; }
+.acc-login #switch { margin-top: 10px; justify-self: start; }
+
+.acc-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; padding: 18px 22px; }
+.acc-head h2 { font-size: 20px; }
+.acc-head .muted + .muted { margin-left: 14px; }
+
+.acc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 22px; }
+
+.acc-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; align-items: start; }
+.acc-side { display: grid; gap: 16px; }
+.acc-side .card { display: grid; gap: 12px; }
+.side-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.acc-side .doc-list li { grid-template-columns: minmax(0, 1fr) auto; }
+
+.code-box { display: grid; gap: 4px; padding: 14px; border-radius: 14px; background: var(--mint-2); text-align: center; }
+.code { font-size: 38px; font-weight: 800; letter-spacing: 0.12em; color: var(--teal); line-height: 1.2; }
+
+.visit-list { display: grid; gap: 14px; }
+.visit-card { display: grid; gap: 10px; }
+.visit-card header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.visit-card .visit-meds { display: grid; gap: 4px; font-size: 14px; }
+.visit-card .remarks { white-space: pre-wrap; }
+#p-current { margin-bottom: 8px; }
+
+@media (max-width: 1100px) {
+  .acc-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 860px) {
+  .acc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .code { font-size: 32px; }
+}
