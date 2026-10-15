@@ -47,7 +47,7 @@ def test_open_token_responses_do_not_expose_the_phone_number(client):
 
 
 def test_unknown_department_rejected(client):
-    assert register(client, department="dentistry").status_code == 422
+    assert register(client, department="astrology").status_code == 422
 
 
 def test_position_updates_as_patients_are_served(client):

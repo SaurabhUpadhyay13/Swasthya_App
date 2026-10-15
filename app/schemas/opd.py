@@ -7,20 +7,64 @@ from pydantic import BaseModel, ConfigDict, Field
 class Department(str, Enum):
     general_medicine = "general_medicine"
     pediatrics = "pediatrics"
-    orthopedics = "orthopedics"
-    cardiology = "cardiology"
     gynecology = "gynecology"
+    cardiology = "cardiology"
+    orthopedics = "orthopedics"
     ent = "ent"
+    ophthalmology = "ophthalmology"
+    dentistry = "dentistry"
+    dermatology = "dermatology"
+    neurology = "neurology"
+    neurosurgery = "neurosurgery"
+    psychiatry = "psychiatry"
+    pulmonology = "pulmonology"
+    gastroenterology = "gastroenterology"
+    nephrology = "nephrology"
+    urology = "urology"
+    endocrinology = "endocrinology"
+    rheumatology = "rheumatology"
+    hematology = "hematology"
+    oncology = "oncology"
+    general_surgery = "general_surgery"
+    cardiothoracic_surgery = "cardiothoracic_surgery"
+    plastic_surgery = "plastic_surgery"
+    vascular_surgery = "vascular_surgery"
+    infectious_disease = "infectious_disease"
+    geriatrics = "geriatrics"
+    physiotherapy = "physiotherapy"
+    ayush = "ayush"
 
 
-# code -> (display name, token prefix)
+# code -> (display name, token prefix). Prefixes must be unique: they start every token number.
 DEPARTMENTS: dict[Department, tuple[str, str]] = {
     Department.general_medicine: ("General Medicine", "GM"),
     Department.pediatrics: ("Pediatrics", "PD"),
-    Department.orthopedics: ("Orthopedics", "OR"),
+    Department.gynecology: ("Gynecology & Obstetrics", "GY"),
     Department.cardiology: ("Cardiology", "CD"),
-    Department.gynecology: ("Gynecology", "GY"),
+    Department.orthopedics: ("Orthopedics", "OR"),
     Department.ent: ("ENT", "EN"),
+    Department.ophthalmology: ("Ophthalmology (Eye)", "EY"),
+    Department.dentistry: ("Dentistry", "DN"),
+    Department.dermatology: ("Dermatology (Skin)", "DM"),
+    Department.neurology: ("Neurology", "NR"),
+    Department.neurosurgery: ("Neurosurgery", "NS"),
+    Department.psychiatry: ("Psychiatry", "PS"),
+    Department.pulmonology: ("Pulmonology (Chest)", "PM"),
+    Department.gastroenterology: ("Gastroenterology", "GE"),
+    Department.nephrology: ("Nephrology (Kidney)", "NP"),
+    Department.urology: ("Urology", "UR"),
+    Department.endocrinology: ("Endocrinology (Diabetes)", "EC"),
+    Department.rheumatology: ("Rheumatology", "RH"),
+    Department.hematology: ("Hematology", "HM"),
+    Department.oncology: ("Oncology (Cancer)", "ON"),
+    Department.general_surgery: ("General Surgery", "SG"),
+    Department.cardiothoracic_surgery: ("Cardiothoracic Surgery", "CT"),
+    Department.plastic_surgery: ("Plastic Surgery", "PL"),
+    Department.vascular_surgery: ("Vascular Surgery", "VS"),
+    Department.infectious_disease: ("Infectious Disease", "ID"),
+    Department.geriatrics: ("Geriatrics", "GR"),
+    Department.physiotherapy: ("Physiotherapy & Rehab", "PT"),
+    Department.ayush: ("AYUSH", "AY"),
 }
 
 

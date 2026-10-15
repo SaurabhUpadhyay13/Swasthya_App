@@ -22,11 +22,11 @@ jobs:
   # 1. Cheap checks first: catches typos, unused or undefined names, broken imports, bad menu links and committed secrets.
   lint:
     name: Lint and wiring checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -60,11 +60,11 @@ jobs:
     strategy:
       fail-fast: false      # one failing combination must not hide the others
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
         python: ["3.10", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
           cache: pip
@@ -75,11 +75,11 @@ jobs:
   # 3. The real app, started for real, driven over HTTP the way the browser drives it.
   smoke:
     name: Smoke test (running server)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -111,12 +111,12 @@ jobs:
   #    so this shows a warning but never blocks a merge.
   audit:
     name: Dependency vulnerability scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install pip-audit
@@ -127,7 +127,7 @@ jobs:
     name: CI passed
     needs: [lint, test, smoke]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Fail unless every required job succeeded
         run: |

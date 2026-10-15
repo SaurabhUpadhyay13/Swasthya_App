@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs before every `git push`. A failing check stops the push.
+python scripts/check.py || python3 scripts/check.py

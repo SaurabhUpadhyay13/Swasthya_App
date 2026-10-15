@@ -9,7 +9,7 @@ A FastAPI service plus a web app for a hospital OPD (outpatient department) and 
 3. **Doctor desk.** Doctors log in, see how many patients are waiting in their department, write remarks, and prescribe medicines while seeing live stock.
 4. **OPD staff desk.** Staff log in to one screen with the hospital-wide dashboard, **walk-in registration** (for patients who come to the desk or don't know which department to choose) and the live queue of every department.
 5. **Patient portal.** A new patient creates their own account, sees the live queue of every department, registers themself in one, and later sees every visit, the doctor's remarks and the medicines they received.
-6. **AI summary.** `POST /summarize` summarises a work order using Groq (free tier).
+6. **AI summary.** `POST /summarize` summarises a work order using an NVIDIA-hosted model (free tier).
 
 Everything is stored in SQLite files, so data survives restarts.
 
@@ -40,13 +40,15 @@ careflow/
 │       ├── opd.py          # opd.db: patients, tokens, events, consultations, prescriptions
 │       ├── doctors.py      # doctors and their sessions
 │       ├── accounts.py     # staff, patient passwords, access codes, sessions
-│       ├── llm.py          # Groq client
+│       ├── llm.py          # NVIDIA LLM client
 │       └── seed.py         # Optional demo data
 ├── frontend/               # Plain HTML/CSS/JS, no build step
 │   ├── index.html
 │   ├── css/ (styles, doctor, accounts)
 │   └── js/ (main, api, ui, icons, views/*)   # views/queue.js is part of the staff desk, not a page
+├── .githooks/              # pre-push hook: runs scripts/check.py
 ├── scripts/
+│   ├── check.py            # lint + frontend check + tests in one command (run before pushing)
 │   ├── check_frontend.py   # frontend wiring check, run by CI
 │   └── smoke.py            # end-to-end check against a running server, run by CI
 ├── .github/
@@ -83,13 +85,13 @@ careflow/
    ```bash
    cp .env.example .env               # Windows: copy .env.example .env
    ```
-5. **Add your Groq key** (only needed for the summarize feature). Create a free key at <https://console.groq.com/keys> and put it in `.env` as `GROQ_API_KEY=gsk_...`. `.env` is git-ignored: never commit it.
+5. **Add your NVIDIA key** (only needed for the summarize feature). Sign in at <https://build.nvidia.com>, open a model such as `openai/gpt-oss-20b`, click "Get API Key", and put it in `.env` as `NVIDIA_API_KEY=nvapi-...`. `.env` is git-ignored: never commit it.
 6. **Start the server**
    ```bash
    uvicorn app.main:app --reload
    ```
 7. **Open the app:** <http://localhost:8000> (API docs: <http://localhost:8000/docs>)
-8. **Run the tests** (no internet or Groq key needed)
+8. **Run the tests** (no internet or NVIDIA key needed)
    ```bash
    pytest
    ```
@@ -102,7 +104,7 @@ python -m app.cli add-staff  "Meena Joshi" OPD-001
 python -m app.cli add-stock  "Paracetamol 500mg" 500
 ```
 
-Department codes: `general_medicine`, `pediatrics`, `orthopedics`, `cardiology`, `gynecology`, `ent`.
+Departments (28, a multi-speciality hospital): General Medicine, Pediatrics, Gynecology & Obstetrics, Cardiology, Orthopedics, ENT, Ophthalmology (Eye), Dentistry, Dermatology, Neurology, Neurosurgery, Psychiatry, Pulmonology, Gastroenterology, Nephrology, Urology, Endocrinology, Rheumatology, Hematology, Oncology, General Surgery, Cardiothoracic Surgery, Plastic Surgery, Vascular Surgery, Infectious Disease, Geriatrics, Physiotherapy, AYUSH. Codes are in `app/schemas/opd.py`; to add one, add a line to `Department` and `DEPARTMENTS` there (no database change).
 
 Or set `SEED_DEMO_DATA=true` in `.env` for a first start with sample data and these demo logins:
 
@@ -244,7 +246,7 @@ Every push to `main` and every pull request runs four checks on GitHub, so you f
 
 | Job | What it catches |
 |---|---|
-| **Lint and wiring checks** | Unused or undefined names and bug-prone Python (`ruff`), JavaScript syntax errors, imports of files that don't exist, menu links without a route, missing CSS/JS files, and a committed `.env`, database file or Groq key |
+| **Lint and wiring checks** | Unused or undefined names and bug-prone Python (`ruff`), JavaScript syntax errors, imports of files that don't exist, menu links without a route, missing CSS/JS files, and a committed `.env`, database file or NVIDIA key |
 | **Tests** (4 runs) | The 101 tests on **Python 3.10 and 3.13, on Linux and on Windows**. One failing combination never hides the others |
 | **Smoke test** | Starts the real server with demo data and drives it over HTTP: all page files load, doctor, staff and patient can log in, walk-in registration, patient sign-up and self-registration, and the one-open-token rule between the desk and the patient |
 | **Dependency scan** | Known vulnerabilities in the libraries. Informational only: it warns but never blocks |
@@ -275,16 +277,29 @@ The checks also run **every Monday morning**. `requirements.txt` does not pin ve
    git push -u origin my-change     # then open a pull request on GitHub
    ```
 
-### Run the same checks on your own computer first
+### Run the same checks on your own computer first (before every push)
 
 ```bash
 pip install -r requirements-dev.txt
-ruff check .
-python scripts/check_frontend.py
-python -m pytest -q
-# with the server running (SEED_DEMO_DATA=true, empty data folder):
-python scripts/smoke.py http://127.0.0.1:8000
+python scripts/check.py        # lint, frontend wiring, tests: the same as CI, in about 10 seconds
 ```
+
+To make Git run it for you automatically on every `git push`, turn on the bundled hook once:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+From then on a failing check prints its error in your terminal and **stops the push**. (Skip it for one push with `git push --no-verify`.) The slower smoke test is run by GitHub only; to run it yourself, start the server with `SEED_DEMO_DATA=true` on an empty data folder and run `python scripts/smoke.py http://127.0.0.1:8000`.
+
+### Seeing the result of a push
+
+GitHub runs CI on its own servers after the push, so nothing appears in the terminal by itself. Ways to see it:
+
+- **Actions tab** of your repository: every push is a row, with a green tick, a red cross or a yellow dot (running).
+- **On the commit or pull request:** the same status shows next to it, and a pull request lists each check.
+- **Email:** GitHub emails you when a run you triggered fails (Settings, Notifications, Actions).
+- **Terminal, optional:** with the [GitHub CLI](https://cli.github.com) installed and `gh auth login` done, run `gh run watch` right after pushing to follow the run live, or `gh run list --limit 5` for the latest results.
 
 ### Reading a failure
 Open the failed run, click the red job, and expand the red step. The message names the file and the problem, for example *"index.html has a menu link data-route="staffdesk" but main.js has no such route"*. If the smoke test fails, its last step prints the server log.
@@ -323,8 +338,8 @@ Left out until there is a real need:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `GROQ_API_KEY` | none | Groq key for `/summarize` |
-| `GROQ_MODEL` | `llama-3.1-8b-instant` | Chat model available to your Groq account |
+| `NVIDIA_API_KEY` | none | NVIDIA key for `/summarize` |
+| `NVIDIA_MODEL` | `openai/gpt-oss-20b` | Any chat model with a Free Endpoint badge on build.nvidia.com |
 | `AVG_CONSULT_MINUTES` | `10` | Used for the estimated wait |
 | `SEED_DEMO_DATA` | `false` | Load sample data on the **first** start only (empty databases) |
 | `DATA_DIR` | `data` | Folder for the two database files |

@@ -12,7 +12,7 @@ Add medicine to the OPD stock (an opening balance, or a manual top-up):
 
     python -m app.cli add-stock "Paracetamol 500mg" 500
 
-Department codes: general_medicine, pediatrics, orthopedics, cardiology, gynecology, ent
+Department codes: see app/schemas/opd.py (for example general_medicine, cardiology, ophthalmology, dentistry)
 """
 
 import argparse

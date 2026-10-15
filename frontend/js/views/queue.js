@@ -21,7 +21,9 @@ const row = (t, doctorBusy) => {
 };
 
 function renderTabs() {
+  // With many departments, tabs show only the busy ones (and the one being viewed); the select shows all.
   $("#tabs", el).innerHTML = state.depts
+    .filter((d) => d.waiting > 0 || d.code === state.dept)
     .map((d) => `<button class="tab ${d.code === state.dept ? "active" : ""}" data-dept="${d.code}">${esc(d.name)}<b>${d.waiting}</b></button>`)
     .join("");
 }
@@ -61,10 +63,14 @@ async function load() {
   if (!depts.some((d) => d.code === state.dept)) state.dept = depts[0].code;
 
   const select = $("#dept-select", el);
+  const view = $("#view-dept", el);
   if (!select.options.length) {
-    select.innerHTML = depts.map((d) => `<option value="${d.code}">${esc(d.name)}</option>`).join("");
+    const options = depts.map((d) => `<option value="${d.code}">${esc(d.name)}</option>`).join("");
+    select.innerHTML = options;
+    view.innerHTML = options;
     select.value = state.dept;
   }
+  view.value = state.dept;
   const sig = JSON.stringify([depts, tokens, state.dept]);
   if (sig === last) return;
   last = sig;
@@ -122,6 +128,12 @@ function wire() {
     } catch (error) {
       toast(errorText(error), "error");
     }
+  });
+
+  $("#view-dept", el).addEventListener("change", (e) => {
+    state.dept = e.target.value;
+    last = null;
+    load().catch((error) => toast(errorText(error), "error"));
   });
 
   $("#tabs", el).addEventListener("click", (e) => {
@@ -202,6 +214,7 @@ export default {
           </form>
         </section>
         <section>
+          <label class="field view-dept">Viewing queue of<select id="view-dept"></select></label>
           <div class="tabs" id="tabs"></div>
           <div id="serving"></div>
           <section class="card" id="list"></section>

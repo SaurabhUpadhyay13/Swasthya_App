@@ -51,7 +51,8 @@
 
 /* ---- Patient: register for a visit ---- */
 .reg-card { display: grid; gap: 14px; margin-bottom: 8px; }
-.dept-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.dept-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; max-height: 440px; overflow: auto; padding: 4px; }
+.view-dept { max-width: 320px; margin-bottom: 12px; }
 .dept-opt {
   display: grid; gap: 4px; text-align: left; padding: 14px; cursor: pointer;
   border: 2px solid var(--line); border-radius: 14px; background: #fff;

@@ -356,7 +356,7 @@ def test_patient_dashboard_lists_live_queue_of_every_department(client, new_pati
     register(client, "Kid", "9000000003", department="pediatrics")
     board = client.get("/patient/dashboard", headers=new_patient).json()
     waiting = {d["code"]: d["waiting"] for d in board["departments"]}
-    assert len(waiting) == 6
+    assert len(waiting) == len(Department)
     assert (waiting["general_medicine"], waiting["pediatrics"], waiting["cardiology"]) == (2, 1, 0)
     assert board["minutes_per_patient"] == 10 and board["current"] is None
 

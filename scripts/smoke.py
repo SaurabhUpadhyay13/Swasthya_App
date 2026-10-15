@@ -67,10 +67,10 @@ staff_h, doctor_h, patient_h = (auth(r.json()["token"]) for r in (staff, doctor,
 
 # ---- 3. Dashboards ----------------------------------------------------------------------
 board = client.get("/staff/dashboard", headers=staff_h)
-check("staff dashboard", board.status_code == 200 and len(board.json()["departments"]) == 6, board.text)
+check("staff dashboard", board.status_code == 200 and len(board.json()["departments"]) >= 20, board.text)
 check("doctor dashboard", client.get("/doctor/dashboard", headers=doctor_h).status_code == 200)
 mine = client.get("/patient/dashboard", headers=patient_h)
-check("patient dashboard shows live departments", mine.status_code == 200 and len(mine.json()["departments"]) == 6, mine.text)
+check("patient dashboard shows live departments", mine.status_code == 200 and len(mine.json()["departments"]) >= 20, mine.text)
 check("a staff token does not open the patient dashboard", client.get("/patient/dashboard", headers=staff_h).status_code == 401)
 check("no token, no staff dashboard", client.get("/staff/dashboard").status_code == 401)
 
