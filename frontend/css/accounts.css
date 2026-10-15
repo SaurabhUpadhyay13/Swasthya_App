@@ -33,3 +33,39 @@
   .acc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .code { font-size: 32px; }
 }
+
+/* ---- Walk-in registration and queue now live on the staff desk ---- */
+#queue-host { margin-bottom: 22px; }
+.acc-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; }
+.acc-pair .card { display: grid; gap: 12px; }
+.acc-pair .doc-list li { grid-template-columns: minmax(0, 1fr) auto; }
+.row-actions { display: flex; align-items: center; gap: 6px; }
+
+.s-cancelled { background: var(--coral-bg); color: var(--coral); }
+
+/* ---- Patient sign-up ---- */
+.switches { display: grid; gap: 2px; margin-top: 12px; }
+.switches .btn { justify-self: start; text-align: left; }
+.acc-login .code-box { margin-bottom: 14px; }
+.acc-login .code-box .muted { margin-bottom: 0; }
+
+/* ---- Patient: register for a visit ---- */
+.reg-card { display: grid; gap: 14px; margin-bottom: 8px; }
+.dept-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.dept-opt {
+  display: grid; gap: 4px; text-align: left; padding: 14px; cursor: pointer;
+  border: 2px solid var(--line); border-radius: 14px; background: #fff;
+  transition: border-color 0.2s, background 0.2s, transform 0.2s var(--ease-out);
+}
+.dept-opt:hover { border-color: var(--mint); transform: translateY(-2px); }
+.dept-opt.selected { border-color: var(--teal-2); background: var(--mint-2); }
+.dept-opt .waiting { font-size: 14px; color: var(--ink-2); }
+.dept-opt .waiting b { font-size: 26px; font-weight: 800; color: var(--teal); letter-spacing: -0.02em; margin-right: 4px; }
+.cancel-row { margin-top: 16px; align-items: center; }
+
+@media (max-width: 1100px) {
+  .acc-pair { grid-template-columns: 1fr; }
+}
+
+/* .btn sets display, which would otherwise override the hidden attribute */
+.acc-login [hidden] { display: none !important; }

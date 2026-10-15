@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 venv/
+env/
+.ruff_cache/
+*.db

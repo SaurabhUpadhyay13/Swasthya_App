@@ -1,6 +1,7 @@
 import { api, staffSession } from "../api.js";
 import { icon } from "../icons.js";
 import { $, countUp, enter, errorText, esc, toast, withBusy } from "../ui.js";
+import queueView from "./queue.js";
 
 const KPIS = [
   { id: "waiting", label: "Patients waiting", icon: "users", tone: "" },
@@ -12,14 +13,7 @@ const KPIS = [
 const until = (iso) =>
   new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-let el, loggedIn, deptSig, stockSig;
-
-const tile = (d) => `
-  <a class="dept ${d.now_serving ? "live" : ""} ${enter(`sd-${d.code}-${d.now_serving}`)}" href="#/queue/${d.code}">
-    <header><h3>${esc(d.name)}</h3><span class="chip chip-soft">${d.waiting} waiting</span></header>
-    <div class="serving"><span class="muted">${d.now_serving ? "Now serving" : "Doctor free"}</span>
-      <strong class="token-big">${d.now_serving ?? "None"}</strong></div>
-  </a>`;
+let el, loggedIn, stockSig, startParam;
 
 const stockRow = (m) => `
   <li class="${enter(`ls-${m.id}-${m.stock}`)}">
@@ -54,7 +48,7 @@ function showLogin() {
 }
 
 function renderShell(staff) {
-  deptSig = stockSig = "";
+  stockSig = "";
   el.innerHTML = `
     <section class="card acc-head">
       <div><h2>${esc(staff.name)}</h2><span class="muted">OPD staff</span> <span class="muted">Staff ID ${esc(staff.staff_id)}</span></div>
@@ -67,28 +61,23 @@ function renderShell(staff) {
           <div><div class="kpi-num" id="kpi-${k.id}">0</div><div class="kpi-label">${k.label}</div></div>
         </article>`).join("")}
     </section>
-    <div class="acc-grid">
-      <div class="acc-main">
-        <div class="section-head"><h2>Department queues</h2><a class="btn ghost small" href="#/queue">Open OPD queue</a></div>
-        <div class="dept-grid" id="depts"></div>
-      </div>
-      <aside class="acc-side">
-        <section class="card">
-          <h2>Patient access code</h2>
-          <p class="muted">Gives a patient a one-time code to set up or reset their Patient portal password.</p>
-          <form class="form" id="code-form">
-            <label class="field">Patient phone number
-              <input name="phone" required inputmode="numeric" pattern="\\d{10}" maxlength="10" autocomplete="off" placeholder="10 digits"></label>
-            <button class="btn" type="submit">Generate code</button>
-          </form>
-          <div id="code-out" aria-live="polite"></div>
-        </section>
-        <section class="card">
-          <div class="side-head"><h2>Low medicine stock</h2><span class="muted" id="stock-level"></span></div>
-          <ul class="doc-list" id="low-stock"></ul>
-          <p class="muted" id="orders-line"></p>
-        </section>
-      </aside>
+    <div id="queue-host"></div>
+    <div class="acc-pair">
+      <section class="card">
+        <h2>Patient access code</h2>
+        <p class="muted">For a patient who already has a hospital record and wants to open or reset their Patient portal login. New patients can sign up on their own.</p>
+        <form class="form" id="code-form">
+          <label class="field">Patient phone number
+            <input name="phone" required inputmode="numeric" pattern="\\d{10}" maxlength="10" autocomplete="off" placeholder="10 digits"></label>
+          <button class="btn" type="submit">Generate code</button>
+        </form>
+        <div id="code-out" aria-live="polite"></div>
+      </section>
+      <section class="card">
+        <div class="side-head"><h2>Low medicine stock</h2><span class="muted" id="stock-level"></span></div>
+        <ul class="doc-list" id="low-stock"></ul>
+        <p class="muted" id="orders-line"></p>
+      </section>
     </div>`;
 
   $("#logout", el).addEventListener("click", async (e) => {
@@ -132,15 +121,13 @@ async function load() {
     return;
   }
   if (root !== el) return;
-  if (!$("#depts", el)) renderShell(board.staff);
+  if (!$("#queue-host", el)) {
+    renderShell(board.staff);
+    await queueView.mount($("#queue-host", el), startParam); // registration and the live queue board
+    if (root !== el) return;
+  }
 
   for (const k of KPIS) countUp($(`#kpi-${k.id}`, el), board[k.id]);
-
-  const dsig = JSON.stringify(board.departments);
-  if (dsig !== deptSig) {
-    deptSig = dsig;
-    $("#depts", el).innerHTML = board.departments.map(tile).join("");
-  }
 
   const ssig = JSON.stringify(board.low_stock);
   if (ssig !== stockSig) {
@@ -156,14 +143,15 @@ async function load() {
 
 export default {
   title: "OPD staff desk",
-  subtitle: "Hospital-wide queues, today's numbers, low stock and patient access codes.",
+  subtitle: "Register walk-in patients, run the queues and watch today's numbers and low stock.",
 
-  async mount(root) {
+  async mount(root, param) {
     el = root;
+    startParam = param;
     loggedIn = Boolean(staffSession.get());
     if (!loggedIn) return showLogin();
     await load();
   },
 
-  refresh: () => (loggedIn ? load() : Promise.resolve()),
+  refresh: () => (loggedIn ? Promise.all([load(), queueView.refresh()]) : Promise.resolve()),
 };

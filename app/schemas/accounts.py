@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.doctors import Visit
 from app.schemas.medicines import Medicine
-from app.schemas.opd import DepartmentQueue, Token
+from app.schemas.opd import Department, DepartmentQueue, Token
 
 PHONE = r"^\d{10}$"
 
@@ -68,6 +68,36 @@ class PatientActivate(BaseModel):
     password: str = Field(min_length=8, max_length=72)
 
 
+class PatientSignupStart(BaseModel):
+    """A new patient's details. The phone number must not be in the hospital's records yet."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    phone: str = Field(pattern=PHONE)
+    name: str = Field(min_length=2, max_length=100, examples=["Asha Verma"])
+    age: int = Field(ge=0, le=120)
+
+
+class SignupCode(BaseModel):
+    """Shown on the patient's own screen. It expires quickly and works once."""
+
+    code: str
+    expires_in_seconds: int
+
+
+class PatientSignup(BaseModel):
+    phone: str = Field(pattern=PHONE)
+    code: str = Field(pattern=r"^\d{6}$")
+    password: str = Field(min_length=8, max_length=72)
+
+
+class PatientTokenRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    department: Department
+    complaint: str | None = Field(default=None, max_length=300, examples=["Fever for 3 days"])
+
+
 class PatientLogin(BaseModel):
     phone: str = Field(pattern=PHONE)
     password: str = Field(min_length=1, max_length=72)
@@ -87,6 +117,8 @@ class PatientLoginResponse(BaseModel):
 
 class PatientDashboard(BaseModel):
     patient: PatientProfile
-    current: Token | None = Field(description="Today's token while the visit is still in progress.")
+    current: Token | None = Field(description="The patient's token while the visit is still open.")
+    departments: list[DepartmentQueue] = Field(description="Live queue of every department, to choose from.")
+    minutes_per_patient: int = Field(description="Used for the estimated wait: patients waiting x this.")
     visits: list[Visit] = Field(description="All other visits, newest first, with doctor remarks and medicines.")
     total_visits: int

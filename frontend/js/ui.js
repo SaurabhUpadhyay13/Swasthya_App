@@ -13,7 +13,7 @@ export const errorText = (error) =>
 
 // ---- Workflow labels (mirror the backend enums) ----
 export const TOKEN_FLOW = ["waiting", "in_consultation", "prescribed", "pharmacy", "completed"];
-export const TOKEN_LABEL = { waiting: "Waiting", in_consultation: "In consultation", prescribed: "Prescribed", pharmacy: "At pharmacy", completed: "Completed" };
+export const TOKEN_LABEL = { waiting: "Waiting", in_consultation: "In consultation", prescribed: "Prescribed", pharmacy: "At pharmacy", completed: "Completed", cancelled: "Cancelled" };
 export const TOKEN_ACTION = { waiting: "Call in", in_consultation: "Mark prescribed", prescribed: "Send to pharmacy", pharmacy: "Complete" };
 
 export const WO_FLOW = ["requested", "ordered", "received", "completed"];

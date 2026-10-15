@@ -42,9 +42,9 @@ def summarize_work_order(order: WorkOrder, settings: Settings) -> str:
     try:
         response = httpx.post(GROQ_URL, json=payload, headers=headers, timeout=settings.groq_timeout_seconds)
     except httpx.TimeoutException:
-        raise api_error(504, "llm_timeout", "The summarisation service took too long to respond.")
+        raise api_error(504, "llm_timeout", "The summarisation service took too long to respond.") from None
     except httpx.HTTPError:
-        raise api_error(502, "llm_unavailable", "Could not reach the summarisation service.")
+        raise api_error(502, "llm_unavailable", "Could not reach the summarisation service.") from None
 
     if response.status_code == 429:
         raise api_error(429, "llm_rate_limited", "Groq rate limit reached. Please retry in a moment.")
@@ -55,4 +55,4 @@ def summarize_work_order(order: WorkOrder, settings: Settings) -> str:
     try:
         return response.json()["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError, ValueError):
-        raise api_error(502, "llm_bad_response", "The summarisation service returned an unexpected response.")
+        raise api_error(502, "llm_bad_response", "The summarisation service returned an unexpected response.") from None

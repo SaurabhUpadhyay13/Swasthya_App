@@ -91,7 +91,11 @@ export const api = {
   issuePatientCode: (phone) => request("POST", "/staff/patient-codes", { phone }),
 
   patientActivate: (phone, code, password) => request("POST", "/patient/activate", { phone, code, password }),
+  patientSignupStart: (phone, name, age) => request("POST", "/patient/signup/start", { phone, name, age }),
+  patientSignup: (phone, code, password) => request("POST", "/patient/signup", { phone, code, password }),
   patientLogin: (phone, password) => request("POST", "/patient/login", { phone, password }),
   patientLogout: () => request("POST", "/patient/logout"),
   patientDashboard: () => request("GET", "/patient/dashboard"),
+  patientRegister: (department, complaint) => request("POST", "/patient/tokens", { department, complaint }),
+  patientCancel: () => request("POST", "/patient/tokens/cancel"),
 };

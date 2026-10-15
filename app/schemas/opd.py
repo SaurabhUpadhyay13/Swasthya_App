@@ -30,6 +30,7 @@ class TokenStatus(str, Enum):
     prescribed = "prescribed"
     pharmacy = "pharmacy"
     completed = "completed"
+    cancelled = "cancelled"  # only from waiting; never part of the forward flow
 
 
 # Registration -> Token -> Queue -> Consultation -> Prescription -> Pharmacy

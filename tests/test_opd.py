@@ -1,5 +1,10 @@
+import itertools
+
+_phones = itertools.count(9000000001)  # every patient gets their own phone, as in real life
+
+
 def register(client, name="Asha Verma", department="general_medicine", **extra):
-    body = {"patient_name": name, "age": 34, "phone": "9876543210", "department": department, **extra}
+    body = {"patient_name": name, "age": 34, "phone": str(next(_phones)), "department": department, **extra}
     return client.post("/opd/tokens", json=body)
 
 
@@ -106,3 +111,101 @@ def test_list_filters(client):
     assert len(client.get("/opd/tokens").json()) == 2
     assert len(client.get("/opd/tokens", params={"department": "pediatrics"}).json()) == 1
     assert len(client.get("/opd/tokens", params={"status": "in_consultation"}).json()) == 1
+
+
+# ---- One open visit per patient, and cancelling ---------------------------------------------
+
+def same_patient(client, department="general_medicine", phone="9876543210"):
+    body = {"patient_name": "Asha Verma", "age": 34, "phone": phone, "department": department}
+    return client.post("/opd/tokens", json=body)
+
+
+def test_patient_cannot_hold_two_tokens_at_once(client):
+    first = same_patient(client)
+    assert first.status_code == 201
+
+    for department in ("general_medicine", "cardiology"):  # same department or another one
+        again = same_patient(client, department)
+        assert again.status_code == 409
+        assert again.json()["error"]["code"] == "already_in_queue"
+        assert "GM-001" in again.json()["error"]["message"]
+    assert len(client.get("/opd/tokens").json()) == 1  # nothing extra was created
+
+
+def test_a_second_token_is_allowed_after_completion(client):
+    same_patient(client)
+    for step in ["in_consultation", "prescribed", "pharmacy"]:
+        set_status(client, "GM-001", step)
+        assert same_patient(client, "cardiology").status_code == 409  # still open at every step
+    set_status(client, "GM-001", "completed")
+    assert same_patient(client, "cardiology").json()["token"] == "CD-001"
+
+
+def test_cancelling_a_waiting_token_frees_the_patient(client):
+    same_patient(client)
+    cancelled = set_status(client, "GM-001", "cancelled")
+    assert cancelled.status_code == 200 and cancelled.json()["status"] == "cancelled"
+    assert cancelled.json()["position"] is None
+    assert same_patient(client, "cardiology").status_code == 201
+
+
+def test_cancelled_token_leaves_the_queue(client):
+    register(client, name="One")
+    register(client, name="Two")
+    set_status(client, "GM-001", "cancelled")
+    assert client.get("/opd/tokens/GM-002").json()["position"] == 1
+    assert {q["code"]: q["waiting"] for q in client.get("/opd/departments").json()}["general_medicine"] == 1
+
+
+def test_only_a_waiting_token_can_be_cancelled_and_cancelled_is_final(client):
+    register(client)
+    set_status(client, "GM-001", "in_consultation")
+    refused = set_status(client, "GM-001", "cancelled")
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "invalid_status_transition"
+
+    register(client, name="Other")
+    set_status(client, "GM-002", "cancelled")
+    for step in ["in_consultation", "cancelled"]:
+        assert set_status(client, "GM-002", step).status_code == 409
+
+
+def test_database_refuses_two_open_visits_even_if_the_app_check_is_skipped(client, opd):
+    import sqlite3
+
+    import pytest
+
+    same_patient(client)
+    with pytest.raises(sqlite3.IntegrityError):
+        opd._conn.execute(
+            "INSERT INTO opd_tokens (token, department, sequence, patient_name, age, phone, status, registered_at, updated_at)"
+            " VALUES ('XX-001', 'ent', 1, 'Dup', 30, '9876543210', 'waiting', 'now', 'now')"
+        )
+
+
+def test_simultaneous_registrations_of_one_patient_create_exactly_one_token(opd):
+    """Staff and patient press the button at the same moment, in different departments."""
+    import threading
+
+    from fastapi import HTTPException
+
+    from app.schemas.opd import Department, PatientRegistration
+
+    results = []
+
+    def attempt(department):
+        try:
+            opd.register(PatientRegistration(patient_name="Asha Verma", age=34, phone="9876543210", department=department))
+            results.append("ok")
+        except HTTPException as error:
+            results.append(error.detail["code"])
+
+    departments = list(Department) * 4
+    threads = [threading.Thread(target=attempt, args=(d,)) for d in departments]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert results.count("ok") == 1
+    assert results.count("already_in_queue") == len(departments) - 1
+    assert len(opd.list_tokens()) == 1

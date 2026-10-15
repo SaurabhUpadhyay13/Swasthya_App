@@ -1,0 +1,11 @@
+# Opens a pull request when a library or a GitHub Action has a new version. CI then tells you if it breaks anything.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

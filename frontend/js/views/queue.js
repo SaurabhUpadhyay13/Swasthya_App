@@ -13,7 +13,10 @@ const row = (t, doctorBusy) => {
         <span class="muted">${t.age} yrs${t.complaint ? `, ${esc(t.complaint)}` : ""}</span></div>
       <div class="wait">${t.position ? `<b>#${t.position}</b><span class="muted">about ${t.estimated_wait_minutes} min</span>` : ""}</div>
       <span class="chip s-${t.status}">${TOKEN_LABEL[t.status]}</span>
+      <div class="row-actions">
+      ${t.status === "waiting" ? `<button class="btn plain small" data-cancel="${t.token}" aria-label="Cancel ${t.token}">Cancel</button>` : ""}
       <button class="btn small" data-advance="${t.token}" data-to="${next}" ${blocked ? 'disabled title="The doctor is with another patient. Use the button above, or mark that patient prescribed first."' : ""}>${TOKEN_ACTION[t.status]}</button>
+      </div>
     </li>`;
 };
 
@@ -25,7 +28,7 @@ function renderTabs() {
 
 function renderBoard() {
   const dept = state.depts.find((d) => d.code === state.dept);
-  const active = state.tokens.filter((t) => t.status !== "completed");
+  const active = state.tokens.filter((t) => t.status !== "completed" && t.status !== "cancelled");
   const serving = state.tokens.find((t) => t.status === "in_consultation");
   const nextUp = state.tokens.find((t) => t.status === "waiting");
 
@@ -147,6 +150,19 @@ function wire() {
   });
 
   $("#list", el).addEventListener("click", async (e) => {
+    const cancel = e.target.closest("[data-cancel]");
+    if (cancel) {
+      if (!confirm(`Cancel token ${cancel.dataset.cancel}? The patient can then register again.`)) return;
+      try {
+        await withBusy(cancel, () => api.setTokenStatus(cancel.dataset.cancel, "cancelled"));
+        toast(`${cancel.dataset.cancel} is cancelled.`);
+        await load();
+      } catch (error) {
+        toast(errorText(error), "error");
+        load().catch(() => {});
+      }
+      return;
+    }
     const button = e.target.closest("[data-advance]");
     if (!button) return;
     try {
@@ -161,8 +177,9 @@ function wire() {
 }
 
 export default {
+  // Not a page of its own any more: the OPD staff desk mounts this under its dashboard.
   title: "OPD queue",
-  subtitle: "Register patients and move them from waiting room to pharmacy.",
+  subtitle: "Register walk-in patients and move them from waiting room to pharmacy.",
 
   async mount(root, param) {
     el = root;
@@ -171,8 +188,8 @@ export default {
     el.innerHTML = `
       <div class="queue-layout">
         <section class="card register">
-          <h2>Register a patient</h2>
-          <span class="muted">A token is issued as soon as you save.</span>
+          <h2>Register a walk-in patient</h2>
+          <span class="muted">For patients who come to the desk. A token is issued as soon as you save.</span>
           <form class="form" id="register-form">
             <label class="field">Patient name<input name="patient_name" required minlength="2" maxlength="100" autocomplete="off"></label>
             <div class="form-row">

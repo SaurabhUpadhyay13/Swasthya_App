@@ -19,6 +19,7 @@ function headline(t) {
     case "in_consultation": return "It is your turn. Please go in to see the doctor.";
     case "prescribed": return "Your prescription is ready. Please walk to the pharmacy.";
     case "pharmacy": return "Collect your medicines at the pharmacy counter.";
+    case "cancelled": return "This token was cancelled. Register again if you still need to be seen.";
     default: return "All done. Wishing you good health.";
   }
 }
@@ -46,7 +47,7 @@ function result(t, dept) {
         <div class="stat"><span class="muted">Estimated wait</span><b>${t.estimated_wait_minutes != null ? `${t.estimated_wait_minutes} min` : "-"}</b></div>
         <div class="stat"><span class="muted">Now serving in ${esc(t.department_name)}</span><b>${dept?.now_serving ?? "None"}</b></div>
       </div>
-      <div class="stepper" style="--p:${index / (STEPS.length - 1)}"><span class="fill"></span>${steps}</div>
+      ${index < 0 ? "" : `<div class="stepper" style="--p:${index / (STEPS.length - 1)}"><span class="fill"></span>${steps}</div>`}
     </article>`;
 }
 
@@ -61,8 +62,8 @@ async function lookup(id, { silent = false } = {}) {
     if (shownFor === id && html === lastHtml) return;
     out.innerHTML = html;
     const stepper = $(".stepper", out);
-    const target = stepper.style.getPropertyValue("--p");
-    if (shownFor === id) {
+    const target = stepper?.style.getPropertyValue("--p");
+    if (stepper && shownFor === id) {
       // Same token, new status: start from the old progress so the bar slides forward
       stepper.style.setProperty("--p", lastProgress);
       stepper.offsetWidth; // force reflow

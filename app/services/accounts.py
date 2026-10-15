@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from threading import RLock
 
 from app.db import utc_now
+from app.errors import api_error
 from app.schemas.accounts import Staff
 
 SCHEMA = """
@@ -37,6 +38,15 @@ CREATE TABLE IF NOT EXISTS access_codes (
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS signup_codes (
+    phone      TEXT PRIMARY KEY,                 -- a phone number that is not yet in patients
+    name       TEXT NOT NULL,
+    age        INTEGER NOT NULL,
+    code_hash  TEXT NOT NULL,
+    attempts   INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS account_sessions (
     token_hash TEXT PRIMARY KEY,
     role       TEXT NOT NULL,                    -- 'staff' or 'patient'
@@ -50,6 +60,7 @@ STAFF_SESSION_HOURS = 12  # roughly one shift
 PATIENT_SESSION_HOURS = 24
 CODE_HOURS = 24
 MAX_CODE_ATTEMPTS = 5
+SIGNUP_CODE_SECONDS = 60
 
 
 def _clean(text: str) -> str:
@@ -105,6 +116,11 @@ class Sessions:
     def end(self, token: str) -> None:
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM account_sessions WHERE token_hash = ?", (_sha(token),))
+
+    def end_all(self, role: str, subject: str) -> None:
+        """Log a person out everywhere, e.g. after their password was reset."""
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM account_sessions WHERE role = ? AND subject = ?", (role, subject))
 
 
 class StaffStore:
@@ -194,7 +210,68 @@ class PatientAccounts:
                 return False
             self._conn.execute("DELETE FROM access_codes WHERE phone = ?", (phone,))  # a code works once
         self.set_password(phone, password)
+        self._sessions.end_all("patient", phone)  # a reset must also remove whoever held the old password
         return True
+
+    # ---- Self sign-up for a brand-new patient -------------------------------------------
+    # The code is shown on the patient's own screen and expires after 60 seconds. It proves a person (not a
+    # script) is at the screen; it does NOT prove they own the phone number. That is why self sign-up is allowed
+    # only for phone numbers the hospital has never seen. A number with an existing record needs the OPD desk's code.
+
+    def signup_start(self, phone: str, name: str, age: int) -> str:
+        code = f"{secrets.randbelow(10**6):06d}"
+        now = datetime.now(timezone.utc)
+        with self._lock, self._conn:
+            if self._conn.execute("SELECT 1 FROM patients WHERE phone = ?", (phone,)).fetchone():
+                raise api_error(
+                    409,
+                    "phone_already_registered",
+                    "This phone number is already registered. Log in, or ask the OPD desk for a one-time code if you have visited before.",
+                )
+            self._conn.execute(
+                "INSERT INTO signup_codes (phone, name, age, code_hash, attempts, created_at, expires_at)"
+                " VALUES (?, ?, ?, ?, 0, ?, ?)"
+                " ON CONFLICT(phone) DO UPDATE SET name = excluded.name, age = excluded.age,"
+                " code_hash = excluded.code_hash, attempts = 0, created_at = excluded.created_at,"
+                " expires_at = excluded.expires_at",
+                (phone, _clean(name), age, _sha(f"{phone}:{code}"),
+                 now.isoformat(timespec="microseconds"),
+                 (now + timedelta(seconds=SIGNUP_CODE_SECONDS)).isoformat(timespec="microseconds")),
+            )
+        return code
+
+    def signup_finish(self, phone: str, code: str, password: str) -> None:
+        """Check the code, then create the patient record and their account together."""
+        valid = taken = False
+        with self._lock, self._conn:
+            row = self._conn.execute("SELECT * FROM signup_codes WHERE phone = ?", (phone,)).fetchone()
+            if row and row["expires_at"] > utc_now() and row["attempts"] < MAX_CODE_ATTEMPTS:
+                if hmac.compare_digest(row["code_hash"], _sha(f"{phone}:{code}")):
+                    valid = True
+                else:
+                    self._conn.execute("UPDATE signup_codes SET attempts = attempts + 1 WHERE phone = ?", (phone,))
+            if valid:
+                if self._conn.execute("SELECT 1 FROM patients WHERE phone = ?", (phone,)).fetchone():
+                    taken = True  # the OPD desk registered this number while the patient was typing
+                else:
+                    now = utc_now()
+                    self._conn.execute(
+                        "INSERT INTO patients (phone, name, age, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                        (phone, row["name"], row["age"], now, now),
+                    )
+                    self._conn.execute(
+                        "INSERT INTO patient_accounts (phone, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                        (phone, hash_password(password), now, now),
+                    )
+                self._conn.execute("DELETE FROM signup_codes WHERE phone = ?", (phone,))
+        if not valid:
+            raise api_error(401, "invalid_code", "That code is not valid or has expired. Please get a new one.")
+        if taken:
+            raise api_error(
+                409,
+                "phone_already_registered",
+                "This phone number was just registered at the OPD desk. Ask them for a one-time code.",
+            )
 
     def verify(self, phone: str, password: str) -> bool:
         with self._lock:

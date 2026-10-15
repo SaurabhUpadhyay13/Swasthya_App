@@ -24,7 +24,7 @@ function tile(d) {
   const dots = Array.from({ length: shown }, (_, i) => `<i style="--i:${i}"></i>`).join("");
   const more = d.waiting > shown ? `<small>+${d.waiting - shown}</small>` : "";
   return `
-    <a class="dept ${d.now_serving ? "live" : ""} ${enter(`dept-${d.code}-${d.now_serving}`)}" href="#/queue/${d.code}">
+    <a class="dept ${d.now_serving ? "live" : ""} ${enter(`dept-${d.code}-${d.now_serving}`)}" href="#/staff/${d.code}">
       <header><h3>${esc(d.name)}</h3><span class="chip chip-soft">${d.waiting} waiting</span></header>
       <div class="serving"><span class="muted">${d.now_serving ? "Now serving" : "Doctor free"}</span>
         <strong class="token-big">${d.now_serving ?? "None"}</strong></div>
@@ -65,7 +65,7 @@ export default {
             <div><div class="kpi-num" id="kpi-${k.id}">0</div><div class="kpi-label">${k.label}</div></div>
           </article>`).join("")}
       </section>
-      <div class="section-head"><h2>Department queues</h2><a class="btn ghost small" href="#/queue">Open OPD queue</a></div>
+      <div class="section-head"><h2>Department queues</h2><a class="btn ghost small" href="#/staff">Open OPD staff desk</a></div>
       <div class="dept-grid" id="depts"></div>
       <div class="section-head"><h2>Latest medicine orders</h2><a class="btn ghost small" href="#/stock">Open stock board</a></div>
       <section class="card"><ul class="recent" id="recent"></ul></section>`;

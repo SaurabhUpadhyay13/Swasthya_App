@@ -1,14 +1,13 @@
 import { icon } from "./icons.js";
 import { $, errorText, toast } from "./ui.js";
 import dashboard from "./views/dashboard.js";
-import queue from "./views/queue.js";
 import track from "./views/tracker.js";
 import stock from "./views/stock.js";
 import doctor from "./views/doctor.js";
 import staff from "./views/staff.js";
 import patient from "./views/patient.js";
 
-const routes = { dashboard, queue, track, stock, doctor, staff, patient };
+const routes = { dashboard, track, stock, doctor, staff, patient };
 const POLL_MS = 5000;
 let current = null;
 

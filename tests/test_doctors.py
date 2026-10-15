@@ -183,8 +183,9 @@ def test_second_visit_shows_the_first_visit_remarks(client, supply, auth):
 
 
 def test_patient_row_is_created_once_per_phone(client, opd):
-    register(client, "Asha Verma", "9876543210")
-    register(client, "Asha V.", "9876543210")  # same phone, same patient
+    first = register(client, "Asha Verma", "9876543210")
+    move(client, first, "in_consultation", "prescribed", "pharmacy", "completed")
+    register(client, "Asha V.", "9876543210")  # same phone, same patient (the first visit is finished)
     rows = opd._conn.execute("SELECT phone, name FROM patients").fetchall()
     assert [tuple(r) for r in rows] == [("9876543210", "Asha V.")]  # latest name wins
     assert opd._conn.execute("SELECT COUNT(*) FROM opd_tokens WHERE phone = '9876543210'").fetchone()[0] == 2

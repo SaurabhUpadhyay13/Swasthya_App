@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.errors import ErrorResponse, api_error
@@ -7,7 +7,13 @@ from app.schemas.accounts import (
     PatientDashboard,
     PatientLogin,
     PatientLoginResponse,
+    PatientSignup,
+    PatientSignupStart,
+    PatientTokenRequest,
+    SignupCode,
 )
+from app.schemas.opd import Token
+from app.services.accounts import SIGNUP_CODE_SECONDS
 from app.services.opd import OpdStore, get_opd_store
 
 router = APIRouter(prefix="/patient", tags=["Patient"])
@@ -31,6 +37,28 @@ def get_current_phone(
 def _logged_in(store: OpdStore, phone: str) -> PatientLoginResponse:
     token, expires_at = store.patient_accounts.start_session(phone)
     return PatientLoginResponse(token=token, expires_at=expires_at, patient=store.patient_dashboard(phone).patient)
+
+
+@router.post(
+    "/signup/start",
+    response_model=SignupCode,
+    responses={409: {"model": ErrorResponse, "description": "Phone number already registered"}},
+)
+def signup_start(body: PatientSignupStart, store: OpdStore = Depends(get_opd_store)):
+    """New patient, step 1: send your details and get a code to type back within 60 seconds."""
+    code = store.patient_accounts.signup_start(body.phone, body.name, body.age)
+    return SignupCode(code=code, expires_in_seconds=SIGNUP_CODE_SECONDS)
+
+
+@router.post(
+    "/signup",
+    response_model=PatientLoginResponse,
+    responses={401: _unauthorised[401], 409: {"model": ErrorResponse, "description": "Phone number already registered"}},
+)
+def signup(body: PatientSignup, store: OpdStore = Depends(get_opd_store)):
+    """New patient, step 2: the code plus a password you choose. Creates your record and logs you in."""
+    store.patient_accounts.signup_finish(body.phone, body.code, body.password)
+    return _logged_in(store, body.phone)
 
 
 @router.post("/activate", response_model=PatientLoginResponse, responses={401: _unauthorised[401]})
@@ -64,3 +92,28 @@ def logout(
 def dashboard(phone: str = Depends(get_current_phone), store: OpdStore = Depends(get_opd_store)):
     """Your live token and all your earlier visits: doctor remarks and medicines given."""
     return store.patient_dashboard(phone)
+
+
+@router.post(
+    "/tokens",
+    response_model=Token,
+    status_code=status.HTTP_201_CREATED,
+    responses={**_unauthorised, 409: {"model": ErrorResponse, "description": "You already have an open token"}},
+)
+def register_myself(
+    body: PatientTokenRequest,
+    phone: str = Depends(get_current_phone),
+    store: OpdStore = Depends(get_opd_store),
+):
+    """Take a token in the department you choose. Only one open token per patient is allowed."""
+    return store.register_for_patient(phone, body.department, body.complaint)
+
+
+@router.post(
+    "/tokens/cancel",
+    response_model=Token,
+    responses={**_unauthorised, 409: {"model": ErrorResponse, "description": "Visit already started"}},
+)
+def cancel_my_token(phone: str = Depends(get_current_phone), store: OpdStore = Depends(get_opd_store)):
+    """Cancel your token while it is still waiting, for example if you picked the wrong department."""
+    return store.cancel_for_patient(phone)

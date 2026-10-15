@@ -15,6 +15,7 @@ A patient's visits are found through the phone number, because the token number
 (GM-004) only identifies one visit.
 """
 
+import sqlite3
 from pathlib import Path
 from threading import RLock
 
@@ -94,6 +95,13 @@ CREATE TABLE IF NOT EXISTS prescription_items (
 CREATE INDEX IF NOT EXISTS idx_prescription_items_token ON prescription_items (token);
 """
 
+# A patient (phone number) can have only one visit that is not completed or cancelled.
+ONE_OPEN_VISIT_INDEX = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS one_open_visit_per_phone ON opd_tokens (phone)"
+    " WHERE phone IS NOT NULL AND status NOT IN ('completed', 'cancelled')"
+)
+_OPEN = "status NOT IN ('completed', 'cancelled')"
+
 _EVENT = "INSERT INTO opd_events (token, department, from_status, to_status, occurred_at) VALUES (?, ?, ?, ?, ?)"
 
 # A token's place in line is computed in SQL: 1 + number of waiting tokens before it in the same department.
@@ -119,6 +127,11 @@ class OpdStore:
         self._supply = supply
         self._conn = connect(db_path)
         self._conn.executescript(DOCTOR_SCHEMA + SCHEMA + ACCOUNT_SCHEMA)
+        try:
+            # Database-level guard behind the check in register(): one open visit per phone number.
+            self._conn.execute(ONE_OPEN_VISIT_INDEX)
+        except sqlite3.IntegrityError:
+            pass  # old test data already breaks the rule; register() still enforces it for new visits
         self._lock = RLock()
         self.doctors = DoctorStore(self._conn, self._lock)
         sessions = Sessions(self._conn, self._lock)
@@ -147,6 +160,17 @@ class OpdStore:
         _, prefix = DEPARTMENTS[data.department]
         now = utc_now()
         with self._lock, self._conn:
+            open_visit = self._conn.execute(
+                f"SELECT token, department, status FROM opd_tokens WHERE phone = ? AND {_OPEN}", (data.phone,)
+            ).fetchone()
+            if open_visit:
+                department_name = DEPARTMENTS[Department(open_visit["department"])][0]
+                raise api_error(
+                    409,
+                    "already_in_queue",
+                    f"This patient already has token {open_visit['token']} in {department_name} "
+                    f"({open_visit['status'].replace('_', ' ')}). Complete or cancel it before registering again.",
+                )
             # New patient, or a returning one: the phone number decides. Latest name and age win.
             self._conn.execute(
                 "INSERT INTO patients (phone, name, age, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
@@ -190,7 +214,17 @@ class OpdStore:
     def update_status(self, token_id: str, new_status: TokenStatus) -> Token:
         with self._lock, self._conn:
             token = self._select(token_id)
-            ensure_next_step(token.status, new_status, TOKEN_FLOW, "token")
+            if new_status == TokenStatus.cancelled:
+                if token.status != TokenStatus.waiting:
+                    raise api_error(
+                        409,
+                        "invalid_status_transition",
+                        f"Only a waiting token can be cancelled. {token.token} is '{token.status.value}'.",
+                    )
+            elif token.status == TokenStatus.cancelled:
+                raise api_error(409, "invalid_status_transition", f"Token {token.token} is cancelled and cannot change.")
+            else:
+                ensure_next_step(token.status, new_status, TOKEN_FLOW, "token")
             if new_status == TokenStatus.in_consultation:
                 busy = self._conn.execute(
                     "SELECT token FROM opd_tokens WHERE department = ? AND status = 'in_consultation'",
@@ -271,20 +305,50 @@ class OpdStore:
         return dict(row)
 
     def patient_dashboard(self, phone: str) -> PatientDashboard:
-        """Everything one patient may see: their live token and their visit history (matched by phone)."""
+        """Everything one patient may see: their live token, live queues and their visit history (by phone)."""
         with self._lock:
             patient = self._conn.execute("SELECT phone, name, age FROM patients WHERE phone = ?", (phone,)).fetchone()
             if patient is None:
                 raise api_error(404, "patient_not_found", "No patient record for this phone number.")
             active = self._conn.execute(
-                "SELECT token FROM opd_tokens WHERE phone = ? AND status != 'completed'"
-                " ORDER BY registered_at DESC LIMIT 1",
+                f"SELECT token FROM opd_tokens WHERE phone = ? AND {_OPEN} ORDER BY registered_at DESC LIMIT 1",
                 (phone,),
             ).fetchone()
             current = self._select(active["token"]) if active else None
             visits = self._visits(phone, current.token if current else "")
             total = self._conn.execute("SELECT COUNT(*) FROM opd_tokens WHERE phone = ?", (phone,)).fetchone()[0]
-        return PatientDashboard(patient=PatientProfile(**dict(patient)), current=current, visits=visits, total_visits=total)
+            departments = self.departments()
+        return PatientDashboard(
+            patient=PatientProfile(**dict(patient)),
+            current=current,
+            departments=departments,
+            minutes_per_patient=self._avg_minutes,
+            visits=visits,
+            total_visits=total,
+        )
+
+    def register_for_patient(self, phone: str, department: Department, complaint: str | None) -> Token:
+        """A logged-in patient takes a token for themselves. Name and age come from their record."""
+        with self._lock:
+            patient = self._conn.execute("SELECT name, age FROM patients WHERE phone = ?", (phone,)).fetchone()
+            if patient is None:
+                raise api_error(404, "patient_not_found", "No patient record for this phone number.")
+            return self.register(
+                PatientRegistration(
+                    patient_name=patient["name"], age=patient["age"], phone=phone,
+                    department=department, complaint=complaint,
+                )
+            )
+
+    def cancel_for_patient(self, phone: str) -> Token:
+        """A patient cancels their own token, only while it is still waiting."""
+        with self._lock:
+            active = self._conn.execute(
+                f"SELECT token FROM opd_tokens WHERE phone = ? AND {_OPEN}", (phone,)
+            ).fetchone()
+            if active is None:
+                raise api_error(404, "no_open_visit", "You have no token to cancel.")
+            return self.update_status(active["token"], TokenStatus.cancelled)
 
     # ---- Doctor's consultation: remarks, prescription, earlier visits ------------------
 

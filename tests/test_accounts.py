@@ -258,3 +258,165 @@ def test_patient_with_no_open_visit_has_no_current_token(client, patient_auth):
     board = client.get("/patient/dashboard", headers=patient_auth).json()
     assert board["current"] is None
     assert [v["token"] for v in board["visits"]] == [token]
+
+
+# ---- Patient self sign-up (new phone numbers only, 60-second on-screen code) ---------------
+
+NEW = "9123456780"
+
+
+def start(client, phone=NEW, name="Neha Singh", age=29):
+    return client.post("/patient/signup/start", json={"phone": phone, "name": name, "age": age})
+
+
+def finish(client, code, phone=NEW, password="a-good-password"):
+    return client.post("/patient/signup", json={"phone": phone, "code": code, "password": password})
+
+
+def test_new_patient_signs_up_without_the_opd_desk(client):
+    started = start(client)
+    assert started.status_code == 200
+    body = started.json()
+    assert body["expires_in_seconds"] == 60 and len(body["code"]) == 6
+
+    done = finish(client, body["code"])
+    assert done.status_code == 200
+    assert done.json()["patient"] == {"phone": NEW, "name": "Neha Singh", "age": 29}
+    headers = {"Authorization": f"Bearer {done.json()['token']}"}
+    assert client.get("/patient/dashboard", headers=headers).json()["patient"]["name"] == "Neha Singh"
+    assert client.post("/patient/login", json={"phone": NEW, "password": "a-good-password"}).status_code == 200
+
+
+def test_signup_code_works_once_and_not_for_another_phone(client):
+    code = start(client).json()["code"]
+    start(client, "9123456781", "Other Person")
+    assert finish(client, code, phone="9123456781").status_code == 401
+    assert finish(client, code).status_code == 200
+    assert finish(client, code).status_code == 401
+
+
+def test_signup_code_expires_after_60_seconds(client, opd):
+    code = start(client).json()["code"]
+    opd._conn.execute("UPDATE signup_codes SET expires_at = '2000-01-01T00:00:00.000000+00:00'")
+    opd._conn.commit()
+    late = finish(client, code)
+    assert late.status_code == 401 and late.json()["error"]["code"] == "invalid_code"
+    assert opd._conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0] == 0  # nothing was created
+
+
+def test_signup_locks_after_five_wrong_codes(client):
+    code = start(client).json()["code"]
+    wrong = "000000" if code != "000000" else "111111"
+    for _ in range(5):
+        assert finish(client, wrong).status_code == 401
+    assert finish(client, code).status_code == 401
+    assert finish(client, start(client).json()["code"]).status_code == 200  # a fresh code works
+
+
+def test_existing_phone_cannot_self_signup(client, staff_auth):
+    register(client)  # walk-in registered at the desk
+    refused = start(client, PHONE)
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "phone_already_registered"
+    assert "OPD desk" in refused.json()["error"]["message"]
+
+
+def test_signup_fails_if_the_desk_registers_the_phone_meanwhile(client):
+    code = start(client).json()["code"]
+    register(client, "Neha Singh", NEW)
+    response = finish(client, code)
+    assert response.status_code == 409
+    assert client.post("/patient/login", json={"phone": NEW, "password": "a-good-password"}).status_code == 401
+
+
+def test_signup_validates_input(client):
+    assert start(client, phone="123").status_code == 422
+    assert start(client, age=200).status_code == 422
+    assert finish(client, "123456", password="short").status_code == 422
+
+
+def test_resetting_a_password_logs_out_the_old_session(client, staff_auth, patient_auth):
+    assert client.get("/patient/dashboard", headers=patient_auth).status_code == 200
+    body = {"phone": PHONE, "code": code_for(client, staff_auth), "password": "brand-new-pass"}
+    assert client.post("/patient/activate", json=body).status_code == 200
+    assert client.get("/patient/dashboard", headers=patient_auth).status_code == 401
+
+
+# ---- Patient registers themself, sees live queues, cancels --------------------------------------
+
+@pytest.fixture
+def new_patient(client):
+    code = start(client).json()["code"]
+    token = finish(client, code).json()["token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_patient_dashboard_lists_live_queue_of_every_department(client, new_patient):
+    register(client, "One", "9000000001")
+    register(client, "Two", "9000000002")
+    register(client, "Kid", "9000000003", department="pediatrics")
+    board = client.get("/patient/dashboard", headers=new_patient).json()
+    waiting = {d["code"]: d["waiting"] for d in board["departments"]}
+    assert len(waiting) == 6
+    assert (waiting["general_medicine"], waiting["pediatrics"], waiting["cardiology"]) == (2, 1, 0)
+    assert board["minutes_per_patient"] == 10 and board["current"] is None
+
+
+def test_patient_registers_themself_in_a_department(client, new_patient):
+    response = client.post("/patient/tokens", headers=new_patient, json={"department": "cardiology", "complaint": "Chest pain"})
+    assert response.status_code == 201
+    token = response.json()
+    assert token["token"] == "CD-001" and token["patient_name"] == "Neha Singh" and token["complaint"] == "Chest pain"
+    board = client.get("/patient/dashboard", headers=new_patient).json()
+    assert board["current"]["token"] == "CD-001"
+
+
+def test_patient_needs_a_login_to_register(client):
+    assert client.post("/patient/tokens", json={"department": "ent"}).status_code == 401
+    assert client.post("/patient/tokens/cancel").status_code == 401
+
+
+def test_patient_cannot_register_twice_by_themself(client, new_patient):
+    client.post("/patient/tokens", headers=new_patient, json={"department": "cardiology"})
+    again = client.post("/patient/tokens", headers=new_patient, json={"department": "ent"})
+    assert again.status_code == 409 and again.json()["error"]["code"] == "already_in_queue"
+    assert len(client.get("/opd/tokens").json()) == 1
+
+
+def test_staff_and_patient_cannot_both_register_the_same_patient(client, new_patient):
+    client.post("/patient/tokens", headers=new_patient, json={"department": "cardiology"})
+    by_desk = client.post("/opd/tokens", json={"patient_name": "Neha Singh", "age": 29, "phone": NEW, "department": "ent"})
+    assert by_desk.status_code == 409 and by_desk.json()["error"]["code"] == "already_in_queue"
+
+
+def test_desk_first_then_patient_is_refused(client, opd, staff_auth):
+    register(client, "Walk In", "9555555555")
+    body = {"phone": "9555555555", "code": code_for(client, staff_auth, "9555555555"), "password": "walk-in-pass"}
+    headers = {"Authorization": f"Bearer {client.post('/patient/activate', json=body).json()['token']}"}
+    refused = client.post("/patient/tokens", headers=headers, json={"department": "ent"})
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "already_in_queue"
+
+
+def test_patient_can_cancel_a_waiting_token_and_pick_another_department(client, new_patient):
+    client.post("/patient/tokens", headers=new_patient, json={"department": "cardiology"})
+    cancelled = client.post("/patient/tokens/cancel", headers=new_patient)
+    assert cancelled.status_code == 200 and cancelled.json()["status"] == "cancelled"
+    assert client.get("/patient/dashboard", headers=new_patient).json()["current"] is None
+
+    retry = client.post("/patient/tokens", headers=new_patient, json={"department": "ent"})
+    assert retry.status_code == 201 and retry.json()["token"] == "EN-001"
+    history = client.get("/patient/dashboard", headers=new_patient).json()["visits"]
+    assert [(v["token"], v["status"]) for v in history] == [("CD-001", "cancelled")]
+
+
+def test_patient_cannot_cancel_once_the_visit_has_started(client, new_patient):
+    token = client.post("/patient/tokens", headers=new_patient, json={"department": "ent"}).json()["token"]
+    move(client, token, "in_consultation")
+    refused = client.post("/patient/tokens/cancel", headers=new_patient)
+    assert refused.status_code == 409
+    nothing = client.post("/patient/tokens/cancel", headers=new_patient)
+    assert nothing.status_code == 409
+
+
+def test_cancel_without_a_token_is_a_404(client, new_patient):
+    response = client.post("/patient/tokens/cancel", headers=new_patient)
+    assert response.status_code == 404 and response.json()["error"]["code"] == "no_open_visit"
