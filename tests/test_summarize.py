@@ -52,7 +52,7 @@ def test_summarize_unknown_work_order(client):
 
 
 def test_summarize_without_api_key(client, order):
-    app.dependency_overrides[get_settings] = lambda: Settings(groq_api_key=None, _env_file=None)
+    app.dependency_overrides[get_settings] = lambda: Settings(nvidia_api_key=None, _env_file=None)
     response = client.post("/summarize", json={"work_order_id": 1})
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "llm_not_configured"
@@ -66,6 +66,7 @@ def test_summarize_without_api_key(client, order):
         (FakeResponse(429), 429, "llm_rate_limited"),
         (FakeResponse(500), 502, "llm_error"),
         (FakeResponse(200, {"unexpected": True}), 502, "llm_bad_response"),
+        (FakeResponse(200, {"choices": [{"message": {"content": None}}]}), 502, "llm_bad_response"),
     ],
 )
 def test_summarize_upstream_failures_are_structured(client, order, monkeypatch, outcome, status, code):

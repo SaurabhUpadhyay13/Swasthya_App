@@ -46,8 +46,8 @@ jobs:
             echo "::error::A .env file, a database or the data/ folder is tracked by git. Remove it and keep it in .gitignore."
             problems=1
           fi
-          if git grep -nE 'gsk_[A-Za-z0-9]{20,}' -- . ':!.github'; then
-            echo "::error::Something that looks like a Groq API key is in the code. Keys belong in .env only."
+          if git grep -nE 'nvapi-[A-Za-z0-9_-]{20,}' -- . ':!.github'; then
+            echo "::error::Something that looks like an NVIDIA API key is in the code. Keys belong in .env only."
             problems=1
           fi
           exit $problems

@@ -9,9 +9,9 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    groq_api_key: str | None = None
-    groq_model: str = "llama-3.1-8b-instant"
-    groq_timeout_seconds: float = 15.0
+    nvidia_api_key: str | None = None
+    nvidia_model: str = "openai/gpt-oss-20b"
+    llm_timeout_seconds: float = 30.0
     avg_consult_minutes: int = 10
     seed_demo_data: bool = False
     # Folder holding opd.db and supply_chain.db (default: <project>/data)

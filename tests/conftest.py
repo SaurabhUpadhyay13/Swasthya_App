@@ -29,7 +29,7 @@ def client(supply, opd):
     """A client wired to fresh, empty stores and a known config for every test."""
     app.dependency_overrides[get_work_order_store] = lambda: supply
     app.dependency_overrides[get_opd_store] = lambda: opd
-    app.dependency_overrides[get_settings] = lambda: Settings(groq_api_key="test-key", _env_file=None)
+    app.dependency_overrides[get_settings] = lambda: Settings(nvidia_api_key="test-key", _env_file=None)
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
