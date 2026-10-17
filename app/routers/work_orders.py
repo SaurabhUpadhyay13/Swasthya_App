@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, status
 
+from app.auth import require_roles
 from app.errors import ErrorResponse
 from app.schemas.work_orders import (
     WorkOrder,
@@ -9,7 +10,16 @@ from app.schemas.work_orders import (
 )
 from app.services.work_orders import WorkOrderStore, get_work_order_store
 
-router = APIRouter(prefix="/work-orders", tags=["Medicine work orders"])
+# Medicine work orders are the administrator's: stock, ordering and receiving.
+router = APIRouter(
+    prefix="/work-orders",
+    tags=["Medicine work orders"],
+    dependencies=[Depends(require_roles("admin"))],
+    responses={
+        401: {"model": ErrorResponse, "description": "Not logged in or session expired"},
+        403: {"model": ErrorResponse, "description": "Administrators only"},
+    },
+)
 
 _not_found = {404: {"model": ErrorResponse, "description": "Work order not found"}}
 

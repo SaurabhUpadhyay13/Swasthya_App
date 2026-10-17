@@ -132,10 +132,14 @@ class WorkOrderStore:
             (" ".join(name.split()), quantity, now),
         )
 
-    def add_stock(self, name: str, quantity: int) -> None:
-        """Opening balance or manual top-up (python -m app.cli add-stock)."""
+    def add_stock(self, name: str, quantity: int) -> Medicine:
+        """Opening balance or manual top-up (python -m app.cli add-stock, or the admin dashboard)."""
         with self._lock, self._conn:
             self._add_stock(name, quantity, utc_now())
+            row = self._conn.execute(
+                "SELECT id, name, stock FROM medicines WHERE name = ?", (" ".join(name.split()),)
+            ).fetchone()
+        return Medicine(**dict(row))
 
     def search_medicines(self, query: str, limit: int = 8) -> list[Medicine]:
         escaped = query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -153,6 +157,32 @@ class WorkOrderStore:
                 "SELECT id, name, stock FROM medicines WHERE stock <= ? ORDER BY stock, name", (level,)
             ).fetchall()
         return [Medicine(**dict(row)) for row in rows]
+
+    def stock_summary(self, low_level: int) -> dict:
+        """Counts for the admin dashboard: how many medicines, how many are out, and the open work orders by status."""
+        with self._lock:
+            medicines, out = self._conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(stock = 0), 0) FROM medicines"
+            ).fetchone()
+            by_status = {
+                row["status"]: row["n"]
+                for row in self._conn.execute("SELECT status, COUNT(*) AS n FROM work_orders GROUP BY status")
+            }
+            critical = self._conn.execute(
+                "SELECT COUNT(*) FROM work_orders WHERE priority = 'critical' AND status IN ('requested', 'ordered')"
+            ).fetchone()[0]
+            events = self._conn.execute(
+                "SELECT work_order_id, medicine_name, from_status, to_status, occurred_at"
+                " FROM work_order_events ORDER BY id DESC LIMIT 10"
+            ).fetchall()
+        return {
+            "medicines": medicines,
+            "out_of_stock": out,
+            "low_stock": self.low_stock(low_level)[:8],
+            "by_status": {s.value: by_status.get(s.value, 0) for s in WorkOrderStatus},
+            "critical_open": critical,
+            "events": [dict(e) for e in events],
+        }
 
     def medicine_names(self, ids: list[int]) -> dict[int, str]:
         if not ids:

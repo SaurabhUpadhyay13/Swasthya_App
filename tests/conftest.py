@@ -25,11 +25,29 @@ def opd(supply):
 
 
 @pytest.fixture
-def client(supply, opd):
-    """A client wired to fresh, empty stores and a known config for every test."""
+def wired(supply, opd):
+    """The app wired to fresh, empty stores and a known config for every test."""
     app.dependency_overrides[get_work_order_store] = lambda: supply
     app.dependency_overrides[get_opd_store] = lambda: opd
     app.dependency_overrides[get_settings] = lambda: Settings(nvidia_api_key="test-key", _env_file=None)
+    yield
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def anon(wired):
+    """A visitor who is not logged in."""
     with TestClient(app) as test_client:
         yield test_client
-    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(wired, opd):
+    """Logged in as an administrator, who may use every shared endpoint (the queue, work orders, summaries).
+
+    A request that passes its own Authorization header (a doctor, staff member or patient) overrides this one.
+    """
+    opd.admins.add("Test Admin", "TEST-ADMIN", "admin-password")
+    token, _, _ = opd.admins.login("TEST-ADMIN", "admin-password")
+    with TestClient(app, headers={"Authorization": f"Bearer {token}"}) as test_client:
+        yield test_client

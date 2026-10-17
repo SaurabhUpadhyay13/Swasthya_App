@@ -1,9 +1,12 @@
-# CareFlow
+# Swasthya AI
 
 A FastAPI service plus a web app for a hospital OPD (outpatient department) and its medicine supply.
 
 **What it does**
 
+The app opens on a **login screen**. Nobody sees any data until they sign in, and each role then sees only its own pages: **Administrator**, **Doctor**, **OPD staff** or **Patient**.
+
+0. **Administrator dashboard.** One screen for the whole hospital: today's OPD numbers, the live queue of every department (4 at a time, with a search box), every doctor's activity (online, patients seen, medicines prescribed, last active), pharmacy status (low and out-of-stock medicines, what was dispensed today, open and critical orders), a 7-day visit chart and a live activity feed. The administrator also adds doctors, OPD staff and stock from the browser, and manages the medicine work orders.
 1. **Medicine supply chain.** A stock-out becomes a replenishment work order: *Requested → Ordered → Received → Completed*. Receiving an order adds to the OPD stock.
 2. **OPD queue.** A patient gets a department token and moves through *Waiting → In consultation → Prescribed → Pharmacy → Completed*. A waiting token can be cancelled. **A patient can have only one open token at a time**, whoever registers them.
 3. **Doctor desk.** Doctors log in, see how many patients are waiting in their department, write remarks, and prescribe medicines while seeing live stock.
@@ -25,27 +28,30 @@ careflow/
 │   ├── errors.py           # One structured error shape for every failure
 │   ├── workflow.py         # "One step forward only" rule for both workflows
 │   ├── db.py               # SQLite helpers, exact UTC timestamps
-│   ├── cli.py              # Admin commands: add doctors, staff and stock
+│   ├── auth.py             # require_roles(...): which login may call which endpoint
+│   ├── cli.py              # Server commands: add administrators, doctors, staff and stock
 │   ├── schemas/            # Pydantic request/response models
 │   │   ├── work_orders.py  opd.py  summarize.py
 │   │   ├── doctors.py  medicines.py
+│   │   ├── admin.py        # administrator login, dashboard, add people and stock
 │   │   └── accounts.py     # staff and patient login, dashboards
 │   ├── routers/            # HTTP layer, one file per feature
 │   │   ├── work_orders.py  opd.py  summarize.py
 │   │   ├── doctors.py      # /doctor/...
+│   │   ├── admin.py        # /admin/...
 │   │   ├── staff.py        # /staff/...
 │   │   └── patients.py     # /patient/... (sign-up, login, register for a visit, cancel)
 │   └── services/           # Business logic and storage
 │       ├── work_orders.py  # supply_chain.db: orders, events, medicine stock
 │       ├── opd.py          # opd.db: patients, tokens, events, consultations, prescriptions
 │       ├── doctors.py      # doctors and their sessions
-│       ├── accounts.py     # staff, patient passwords, access codes, sessions
+│       ├── accounts.py     # administrators, staff, patient passwords, access codes, sessions
 │       ├── llm.py          # NVIDIA LLM client
 │       └── seed.py         # Optional demo data
 ├── frontend/               # Plain HTML/CSS/JS, no build step
 │   ├── index.html
-│   ├── css/ (styles, doctor, accounts)
-│   └── js/ (main, api, ui, icons, views/*)   # views/queue.js is part of the staff desk, not a page
+│   ├── css/ (styles, doctor, accounts, admin)
+│   └── js/ (main, api, ui, icons, views/*)   # login.js is the first screen; views/queue.js is part of the staff desk, not a page
 ├── .githooks/              # pre-push hook: runs scripts/check.py
 ├── scripts/
 │   ├── check.py            # lint + frontend check + tests in one command (run before pushing)
@@ -54,7 +60,7 @@ careflow/
 ├── .github/
 │   ├── workflows/ci.yml        # checks on every push and pull request
 │   └── dependabot.yml          # weekly update pull requests
-├── tests/                  # pytest, 101 tests, LLM calls mocked
+├── tests/                  # pytest, 134 tests, LLM calls mocked
 ├── ruff.toml  requirements-dev.txt
 ├── data/                   # Created on first run: opd.db, supply_chain.db (git-ignored)
 ├── .env.example            # Copy to .env
@@ -98,25 +104,43 @@ careflow/
 
 ### Set up people and stock (run once, with the server stopped or running)
 
+Create the first administrator from the command line (you are asked for a password, at least 8 characters). After that the administrator adds doctors, OPD staff and stock **from the browser** (Doctors and staff page, Dashboard).
+
+```bash
+python -m app.cli add-admin  "Dr. Rohan Mehta" ADMIN-001
+```
+
+The commands below do the same from the server, if you prefer:
+
 ```bash
 python -m app.cli add-doctor "Dr. Asha Rao" MH-2026-1001 general_medicine
 python -m app.cli add-staff  "Meena Joshi" OPD-001
 python -m app.cli add-stock  "Paracetamol 500mg" 500
 ```
 
-Departments (28, a multi-speciality hospital): General Medicine, Pediatrics, Gynecology & Obstetrics, Cardiology, Orthopedics, ENT, Ophthalmology (Eye), Dentistry, Dermatology, Neurology, Neurosurgery, Psychiatry, Pulmonology, Gastroenterology, Nephrology, Urology, Endocrinology, Rheumatology, Hematology, Oncology, General Surgery, Cardiothoracic Surgery, Plastic Surgery, Vascular Surgery, Infectious Disease, Geriatrics, Physiotherapy, AYUSH. Codes are in `app/schemas/opd.py`; to add one, add a line to `Department` and `DEPARTMENTS` there (no database change).
+The Administrator dashboard shows 4 departments at a time with arrows to slide to the next 4 and a search box that filters as you type ("eye", "den", "card"). Departments (28, a multi-speciality hospital): General Medicine, Pediatrics, Gynecology & Obstetrics, Cardiology, Orthopedics, ENT, Ophthalmology (Eye), Dentistry, Dermatology, Neurology, Neurosurgery, Psychiatry, Pulmonology, Gastroenterology, Nephrology, Urology, Endocrinology, Rheumatology, Hematology, Oncology, General Surgery, Cardiothoracic Surgery, Plastic Surgery, Vascular Surgery, Infectious Disease, Geriatrics, Physiotherapy, AYUSH. Codes are in `app/schemas/opd.py`; to add one, add a line to `Department` and `DEPARTMENTS` there (no database change).
 
 Or set `SEED_DEMO_DATA=true` in `.env` for a first start with sample data and these demo logins:
 
 | Role | Login |
 |---|---|
-| Doctor | Dr. Asha Rao / `DEMO-1001` |
+| Administrator | `DEMO-ADMIN` / `swasthya-admin` |
+| Doctor | Dr. Asha Rao / `DEMO-1001` (more: `DEMO-1002` to `DEMO-1004`) |
 | OPD staff | Meena Joshi / `DEMO-STAFF` |
 | Patient | phone `9876500001` / password `careflow-demo` |
 
 ---
 
 ## How each role uses the app
+
+Open the app and choose your role on the first screen. After you log in you see only your own pages, and **Log out** (bottom left) brings you back to the first screen. A page of another role redirects you home, and the server refuses its data (`403`) even if someone types the address.
+
+### Administrator
+1. Log in with your **admin ID and password**. Five wrong passwords in a row lock the account for a few minutes.
+2. **Dashboard:** today's numbers, the live queue of every department (slide with the arrows or type in the search box), each doctor's activity, the pharmacy section, a 7-day visit chart and the live activity feed. It refreshes every few seconds.
+3. **Doctors and staff:** see who can log in, who is online and what each doctor did today. Add a doctor (name, medical ID, department) or an OPD staff member (name, staff ID) with the forms. They can log in straight away.
+4. **Pharmacy:** add stock (a new name creates the medicine) on the Dashboard, and run the medicine work orders (*Requested → Ordered → Received → Completed*, plus AI summary) on **Medicine stock**.
+5. **Track a token** shows any token's position and wait.
 
 ### Doctor desk
 1. Log in with your **name and medical ID**.
@@ -172,10 +196,12 @@ Stock rules: a work order marked *Received* adds its quantity to stock. Completi
 - **Self sign-up** is allowed only for a phone number the hospital has never seen. The 60-second code on the patient's screen shows that a person (not a script) is there, but it **does not prove they own the phone number** because there is no SMS. That is why a number with an existing record needs the OPD desk's one-time code (valid 24 hours, works once, locks after 5 wrong tries).
 - **Known limit:** someone could sign up with another person's number before that person ever visits. When the real owner later comes to the desk, ask for a new code: it resets the password and logs the first person out. Sending the code by SMS would close this gap completely.
 - Signing up reveals whether a phone number already has a hospital record ("already registered").
+- **Administrators:** admin ID plus password (scrypt hash). Five wrong passwords lock that account for a few minutes (`429`). Create the first one with `python -m app.cli add-admin`.
 - **Doctors and staff:** name plus ID, no password. Anyone who knows a doctor's name and medical ID can log in as them. Add a PIN or password before real use.
-- Sessions are random tokens; only their hash is stored. Staff and doctor sessions last 12 hours, patient sessions 24.
-- **Not protected yet:** the Overview, Track a token and Medicine stock pages, and the endpoints behind them and behind the queue board (`/opd/...`, `/work-orders`), are still open to anyone who can reach the server. The one-open-token rule applies to them too. Do not expose the app to the internet as it is.
-- There is no limit on wrong *password* attempts yet.
+- Sessions are random tokens; only their hash is stored. Administrator, staff and doctor sessions last 12 hours, patient sessions 24.
+- **Who may call what** (checked on the server, not just hidden in the menu): `/admin/*`, `/work-orders` and `/summarize` are administrator-only; `/opd/*` is for OPD staff and administrators (a doctor may only move tokens of their own department and read the department queues); `/doctor/*`, `/staff/*` and `/patient/*` each need their own role. A login of the wrong role gets `403 forbidden`, no login `401`.
+- There is no limit on wrong *patient* password attempts yet.
+- The server speaks plain HTTP. Put it behind HTTPS (a reverse proxy) before anyone outside a trusted network uses it.
 - One phone number is one patient: family members who share a phone share one record.
 
 ---
@@ -188,7 +214,7 @@ Errors always look like:
 { "error": { "code": "invalid_credentials", "message": "Name or staff ID not recognised." } }
 ```
 
-Validation errors (`422`) add a `details` list of `{field, message}`. Logged-in endpoints expect `Authorization: Bearer <token>` from the matching login.
+Validation errors (`422`) add a `details` list of `{field, message}`. Logged-in endpoints expect `Authorization: Bearer <token>` from the matching login. Medicine work orders and the `/opd/...` endpoints below need an administrator (and, for `/opd`, OPD staff) token.
 
 ### Medicine work orders
 | Method | Path | Purpose |
@@ -217,6 +243,16 @@ Validation errors (`422`) add a `details` list of `{field, message}`. Logged-in 
 | `GET` | `/doctor/consultations/{token}` | Remarks, prescription and earlier visits (`403 wrong_department`) |
 | `PUT` | `/doctor/consultations/{token}` | Save remarks and prescription (`409 not_in_consultation`) |
 | `GET` | `/doctor/medicines?q=` | Search medicines with live stock |
+
+### Administrator
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/admin/login` | `{admin_id, password}` returns a token (`401 invalid_credentials`, `429 too_many_attempts`) |
+| `POST` | `/admin/logout` | End the session |
+| `GET` | `/admin/dashboard` | Today, totals, 7-day visits, department queues, every doctor's activity, staff, pharmacy, live feed |
+| `POST` | `/admin/doctors` | `{name, medical_id, department}` register a doctor (`409 already_registered`) |
+| `POST` | `/admin/staff` | `{name, staff_id}` register OPD staff (`409 already_registered`) |
+| `POST` | `/admin/stock` | `{medicine, quantity}` add stock, creating the medicine if new |
 
 ### OPD staff
 | Method | Path | Purpose |
@@ -247,8 +283,8 @@ Every push to `main` and every pull request runs four checks on GitHub, so you f
 | Job | What it catches |
 |---|---|
 | **Lint and wiring checks** | Unused or undefined names and bug-prone Python (`ruff`), JavaScript syntax errors, imports of files that don't exist, menu links without a route, missing CSS/JS files, and a committed `.env`, database file or NVIDIA key |
-| **Tests** (4 runs) | The 101 tests on **Python 3.10 and 3.13, on Linux and on Windows**. One failing combination never hides the others |
-| **Smoke test** | Starts the real server with demo data and drives it over HTTP: all page files load, doctor, staff and patient can log in, walk-in registration, patient sign-up and self-registration, and the one-open-token rule between the desk and the patient |
+| **Tests** (4 runs) | The 134 tests on **Python 3.10 and 3.13, on Linux and on Windows**. One failing combination never hides the others |
+| **Smoke test** | Starts the real server with demo data and drives it over HTTP: all page files load, administrator, doctor, staff and patient can log in, the administrator dashboard loads and a doctor's token is refused there, walk-in registration, patient sign-up and self-registration, and the one-open-token rule between the desk and the patient |
 | **Dependency scan** | Known vulnerabilities in the libraries. Informational only: it warns but never blocks |
 | **CI passed** | One summary check. Make **this** the required check (below) |
 
@@ -261,7 +297,7 @@ The checks also run **every Monday morning**. `requirements.txt` does not pin ve
    git init -b main
    git add .
    git status                 # check that .env, data/ and venv/ are NOT listed
-   git commit -m "CareFlow"
+   git commit -m "Swasthya AI"
    ```
 2. **Create an empty repository** on GitHub (no README, no .gitignore), then connect and push:
    ```bash

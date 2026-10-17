@@ -1,18 +1,21 @@
 from fastapi import APIRouter, Depends
 
+from app.auth import require_roles
 from app.config import Settings, get_settings
 from app.errors import ErrorResponse
 from app.schemas.summarize import SummarizeRequest, SummarizeResponse
 from app.services.llm import summarize_work_order
 from app.services.work_orders import WorkOrderStore, get_work_order_store
 
-router = APIRouter(tags=["AI summary"])
+router = APIRouter(tags=["AI summary"], dependencies=[Depends(require_roles("admin"))])
 
 
 @router.post(
     "/summarize",
     response_model=SummarizeResponse,
     responses={
+        401: {"model": ErrorResponse, "description": "Not logged in or session expired"},
+        403: {"model": ErrorResponse, "description": "Administrators only"},
         404: {"model": ErrorResponse, "description": "Work order not found"},
         503: {"model": ErrorResponse, "description": "NVIDIA_API_KEY not configured"},
         502: {"model": ErrorResponse, "description": "LLM provider error"},

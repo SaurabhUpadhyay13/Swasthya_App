@@ -1,8 +1,7 @@
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.db import start_of_day_utc
 from app.errors import ErrorResponse, api_error
 from app.schemas.accounts import (
     AccessCode,
@@ -36,12 +35,6 @@ def get_current_staff(
     return staff
 
 
-def _start_of_today_utc() -> str:
-    """Midnight in the server's local time zone, as a UTC timestamp comparable with stored times."""
-    midnight = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
-    return midnight.astimezone(timezone.utc).isoformat(timespec="microseconds")
-
-
 @router.post("/login", response_model=StaffLoginResponse, responses={401: _unauthorised[401]})
 def login(body: StaffLogin, store: OpdStore = Depends(get_opd_store)):
     """Log in with your name and registered staff ID."""
@@ -73,7 +66,7 @@ def dashboard(
     critical = [o for o in orders if o.priority == Priority.critical and o.status != WorkOrderStatus.received]
     return StaffDashboard(
         staff=staff,
-        **store.day_stats(_start_of_today_utc()),
+        **store.day_stats(start_of_day_utc()),
         departments=store.departments(),
         low_stock=supply.low_stock(LOW_STOCK_LEVEL),
         low_stock_level=LOW_STOCK_LEVEL,

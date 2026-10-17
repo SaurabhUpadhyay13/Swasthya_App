@@ -48,8 +48,8 @@ def test_wrong_credentials_give_the_same_error(client, doctor, name, medical_id)
     assert response.json()["error"] == {"code": "invalid_credentials", "message": "Name or medical ID not recognised."}
 
 
-def test_doctor_endpoints_need_a_login(client, doctor):
-    missing = client.get("/doctor/dashboard")
+def test_doctor_endpoints_need_a_login(client, anon, doctor):
+    missing = anon.get("/doctor/dashboard")
     assert missing.status_code == 401
     assert missing.json()["error"]["code"] == "not_authenticated"
 

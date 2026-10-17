@@ -41,6 +41,9 @@ def seed_demo_data(orders: WorkOrderStore, opd: OpdStore) -> None:
         orders.add_stock(name, quantity)
     # Demo login on the Doctor desk: Dr. Asha Rao / DEMO-1001
     opd.doctors.add("Dr. Asha Rao", "DEMO-1001", Department.general_medicine)
+    opd.doctors.add("Dr. Kavita Nair", "DEMO-1002", Department.cardiology)  # more doctors so the admin view has people
+    opd.doctors.add("Dr. Sameer Khan", "DEMO-1003", Department.pediatrics)
+    opd.doctors.add("Dr. Priya Menon", "DEMO-1004", Department.ophthalmology)
     # Demo login on the Staff desk: Meena Joshi / DEMO-STAFF
     opd.staff.add("Meena Joshi", "DEMO-STAFF")
 
@@ -48,6 +51,8 @@ def seed_demo_data(orders: WorkOrderStore, opd: OpdStore) -> None:
         opd.register(PatientRegistration(patient_name=n, age=a, phone=p, department=d, complaint=c))
         for n, a, p, d, c in _PATIENTS
     ]
+    # Demo login on the Admin screen: DEMO-ADMIN / swasthya-admin
+    opd.admins.add("Dr. Rohan Mehta", "DEMO-ADMIN", "swasthya-admin")
     # Demo login on the Patient portal: phone 9876500001 / password careflow-demo
     opd.patient_accounts.set_password("9876500001", "careflow-demo")
     opd.update_status(tokens[0].token, TokenStatus.in_consultation)  # GM-001 is being seen

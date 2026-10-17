@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CareFlow Hospital Operations</title>
+  <title>Swasthya AI - Hospital Operations</title>
   <meta name="description" content="OPD queue and medicine stock tracking for hospital teams.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,26 +12,39 @@
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/css/doctor.css">
   <link rel="stylesheet" href="/css/accounts.css">
+  <link rel="stylesheet" href="/css/admin.css">
 </head>
 <body>
   <div class="app">
     <aside class="sidebar">
-      <a class="brand" href="#/dashboard" aria-label="CareFlow home">
+      <a class="brand" href="#/login" aria-label="Swasthya AI home">
         <span class="brand-mark" id="brand-mark"></span>
-        <span class="brand-text"><strong>CareFlow</strong><small>OPD and pharmacy</small></span>
+        <span class="brand-text"><strong>Swasthya AI</strong><small>OPD and pharmacy</small></span>
       </a>
       <nav class="nav" aria-label="Main">
-        <a href="#/dashboard" data-route="dashboard"><span data-icon="grid"></span><span>Overview</span></a>
-        <a href="#/track" data-route="track"><span data-icon="search"></span><span>Track a token</span></a>
-        <a href="#/stock" data-route="stock"><span data-icon="package"></span><span>Medicine stock</span></a>
-        <a href="#/doctor" data-route="doctor"><span data-icon="pulse"></span><span>Doctor desk</span></a>
-        <a href="#/staff" data-route="staff"><span data-icon="shield"></span><span>OPD staff desk</span></a>
-        <a href="#/patient" data-route="patient"><span data-icon="heart"></span><span>Patient portal</span></a>
+        <a href="#/admin" data-route="admin" hidden><span data-icon="grid"></span><span>Dashboard</span></a>
+        <a href="#/people" data-route="people" hidden><span data-icon="users"></span><span>Doctors and staff</span></a>
+        <a href="#/stock" data-route="stock" hidden><span data-icon="package"></span><span>Medicine stock</span></a>
+        <a href="#/staff" data-route="staff" hidden><span data-icon="shield"></span><span>OPD staff desk</span></a>
+        <a href="#/doctor" data-route="doctor" hidden><span data-icon="pulse"></span><span>Doctor desk</span></a>
+        <a href="#/patient" data-route="patient" hidden><span data-icon="heart"></span><span>My health</span></a>
+        <a href="#/track" data-route="track" hidden><span data-icon="search"></span><span>Track a token</span></a>
       </nav>
-      <a class="docs-link" href="/docs" target="_blank" rel="noopener">API documentation</a>
+      <div class="sidebar-foot">
+        <div class="signed-in" id="who" hidden>
+          <span class="signed-in-label">Signed in as</span>
+          <strong id="who-role"></strong>
+          <button type="button" class="btn signed-in-out" id="sign-out"><span data-icon="logout"></span>Log out</button>
+        </div>
+        <a class="docs-link" href="/docs" target="_blank" rel="noopener">API documentation</a>
+      </div>
     </aside>
 
     <main class="main">
+      <a class="auth-home" href="#/login" aria-label="Swasthya AI home">
+        <span class="brand-mark" id="auth-mark"></span><strong>Swasthya AI</strong>
+        <span class="auth-back" id="auth-back">All sign-in options</span>
+      </a>
       <header class="topbar">
         <div>
           <h1 id="page-title">Overview</h1>

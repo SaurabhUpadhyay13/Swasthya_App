@@ -34,7 +34,7 @@ ul { list-style: none; padding: 0; }
 :focus-visible { outline: 3px solid rgba(15, 142, 150, 0.45); outline-offset: 2px; border-radius: 8px; }
 
 /* ---------- Shell ---------- */
-.app { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+.app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
 
 .sidebar {
   position: sticky; top: 0; height: 100vh; padding: 22px 14px;
@@ -60,10 +60,20 @@ ul { list-style: none; padding: 0; }
 .nav a:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
 .nav a.active { background: var(--mint); color: var(--navy); }
 .nav a.active svg { color: var(--teal); }
+.nav a[hidden] { display: none; }
+.sidebar-foot { margin-top: auto; display: grid; gap: 8px; }
+.sidebar-foot .docs-link { margin-top: 0; }
+.signed-in { display: grid; gap: 2px; padding: 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.07); }
+.signed-in[hidden] { display: none; }
+.signed-in-label { font-size: 12px; color: #8fb2bd; }
+.signed-in strong { color: #fff; font-size: 15px; }
+.signed-in-out { margin-top: 8px; justify-content: center; padding: 8px 12px; background: rgba(255, 255, 255, 0.1); color: #fff; box-shadow: none; }
+.signed-in-out:hover { background: rgba(255, 255, 255, 0.18); }
+.signed-in-out svg { width: 17px; height: 17px; }
 .docs-link { margin-top: auto; padding: 10px 12px; font-size: 13px; color: #8fb2bd; border-radius: 10px; }
 .docs-link:hover { color: #fff; background: rgba(255, 255, 255, 0.07); }
 
-.main { padding: 26px 36px 56px; max-width: 1320px; width: 100%; }
+.main { padding: 26px 36px 56px; max-width: 1320px; width: 100%; min-width: 0; }
 .topbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 24px; }
 .topbar h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
 .topbar-right { display: flex; align-items: center; gap: 14px; }
@@ -138,7 +148,25 @@ ul { list-style: none; padding: 0; }
 .kpi-num { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
 .kpi-label { color: var(--ink-3); font-size: 13px; margin-top: 4px; }
 
-.dept-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 16px; }
+.dept-tools { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.dept-search { position: relative; flex: 1 1 260px; max-width: 380px; display: block; }
+.dept-search svg { position: absolute; left: 13px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+.dept-search input { width: 100%; padding: 10px 14px 10px 40px; border: 1.5px solid var(--line); border-radius: 999px; background: var(--card); color: var(--ink); font-weight: 500; }
+.dept-search input:focus { outline: none; border-color: var(--teal-2); box-shadow: 0 0 0 4px rgba(15, 142, 150, 0.14); }
+.pager { display: flex; align-items: center; gap: 10px; }
+.arrow { display: grid; place-items: center; width: 38px; height: 38px; border: 1.5px solid var(--line); border-radius: 50%; background: var(--card); color: var(--teal); cursor: pointer; transition: background 0.2s, border-color 0.2s, transform 0.2s var(--ease-out); }
+.arrow:hover:not(:disabled) { background: var(--mint-2); border-color: var(--mint); transform: scale(1.08); }
+.arrow:active:not(:disabled) { transform: scale(0.94); }
+.arrow:disabled { opacity: 0.35; cursor: default; }
+.arrow:focus-visible { outline: 3px solid rgba(15, 142, 150, 0.35); outline-offset: 2px; }
+
+/* Department carousel: one page of tiles is visible, the track slides sideways to the next page. */
+.dept-viewport { min-width: 0; overflow: hidden; padding: 4px 0 18px; margin-bottom: -10px; }
+.dept-track { --n: 4; --page: 0; --gap: 16px; display: flex; gap: var(--gap); width: 100%; transform: translateX(calc(var(--page) * -1 * (100% + var(--gap)))); transition: transform 0.55s var(--ease-out); }
+.dept-track .dept { flex: 0 0 calc((100% - (var(--n) - 1) * var(--gap)) / var(--n)); min-width: 0; }
+.dept-track .dept:hover { transform: none; }
+.dept-empty { padding: 28px 12px; text-align: center; color: var(--ink-3); }
+.dept-empty[hidden] { display: none; }
 .dept { display: block; background: var(--card); border-radius: 16px; padding: 18px; box-shadow: var(--shadow); border: 1.5px solid transparent; transition: transform 0.2s var(--ease-out), border-color 0.2s; }
 .dept:hover { transform: translateY(-3px); border-color: var(--mint); }
 .dept header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -285,7 +313,8 @@ ul { list-style: none; padding: 0; }
   .register { position: static; }
 }
 @media (max-width: 860px) {
-  .app { grid-template-columns: 1fr; }
+  .sidebar-foot { display: none; }
+  .app { grid-template-columns: minmax(0, 1fr); }
   .sidebar { position: fixed; z-index: 40; top: auto; bottom: 0; left: 0; right: 0; height: auto; flex-direction: row; padding: 8px 10px; gap: 0; justify-content: center; }
   .brand, .docs-link { display: none; }
   .nav { flex-direction: row; width: 100%; justify-content: space-around; }
@@ -311,3 +340,14 @@ ul { list-style: none; padding: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------- Signed out: just the login screens, no menu ---------- */
+.auth-home { display: none; }
+body.signed-out .sidebar, body.signed-out .topbar { display: none; }
+body.signed-out .app { grid-template-columns: minmax(0, 1fr); }
+body.signed-out .main { margin: 0 auto; padding-top: 22px; }
+body.signed-out .auth-home { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; font-size: 20px; letter-spacing: -0.01em; }
+body.signed-out .auth-home .brand-mark { width: 38px; height: 38px; }
+.auth-back { margin-left: auto; font-size: 14px; font-weight: 700; color: var(--teal); padding: 7px 14px; border: 1.5px solid var(--line); border-radius: 999px; background: var(--card); }
+.auth-back:hover { border-color: var(--mint); background: var(--mint-2); }
+body[data-page="login"] .auth-back { display: none; }

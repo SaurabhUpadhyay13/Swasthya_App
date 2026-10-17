@@ -1,7 +1,7 @@
 """Tiny SQLite helpers shared by both datasets (OPD and medicine supply chain)."""
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -12,6 +12,12 @@ def utc_now() -> str:
     Fixed-width, so the text sorts in time order, and any tool can parse it.
     """
     return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+
+
+def start_of_day_utc(days_ago: int = 0) -> str:
+    """Midnight in the server's local time zone (`days_ago` days back), as a UTC timestamp comparable with stored times."""
+    midnight = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+    return (midnight - timedelta(days=days_ago)).astimezone(timezone.utc).isoformat(timespec="microseconds")
 
 
 def connect(path: str | Path) -> sqlite3.Connection:

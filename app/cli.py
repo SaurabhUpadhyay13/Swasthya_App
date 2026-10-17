@@ -1,5 +1,9 @@
 """Administrator commands. Run from the project folder with the virtual environment active.
 
+Register an administrator (they log in on the Admin screen with this ID and a password; you are asked for it):
+
+    python -m app.cli add-admin "Dr. Rohan Mehta" ADMIN-001
+
 Register a doctor (they can then log in on the Doctor desk with this name and medical ID):
 
     python -m app.cli add-doctor "Dr. Asha Rao" MH-2026-1001 general_medicine
@@ -16,6 +20,7 @@ Department codes: see app/schemas/opd.py (for example general_medicine, cardiolo
 """
 
 import argparse
+import getpass
 
 from app.config import get_settings
 from app.schemas.opd import DEPARTMENTS, Department
@@ -24,8 +29,13 @@ from app.services.work_orders import get_work_order_store
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="python -m app.cli", description="CareFlow administrator commands")
+    parser = argparse.ArgumentParser(prog="python -m app.cli", description="Swasthya AI administrator commands")
     commands = parser.add_subparsers(dest="command", required=True)
+
+    admin = commands.add_parser("add-admin", help="Register an administrator who can log in")
+    admin.add_argument("name", help='Full name, e.g. "Dr. Rohan Mehta"')
+    admin.add_argument("admin_id", help="Admin ID, e.g. ADMIN-001")
+    admin.add_argument("--password", help="At least 8 characters. Leave out to be asked (keeps it out of your shell history)")
 
     doctor = commands.add_parser("add-doctor", help="Register a doctor who can log in")
     doctor.add_argument("name", help='Full name, e.g. "Dr. Asha Rao"')
@@ -45,7 +55,14 @@ def main() -> None:
     supply = get_work_order_store(settings)
     opd = get_opd_store(settings, supply)
 
-    if args.command == "add-doctor":
+    if args.command == "add-admin":
+        password = args.password or getpass.getpass("Password (at least 8 characters): ")
+        try:
+            person = opd.admins.add(args.name, args.admin_id, password)
+        except ValueError as error:
+            parser.exit(1, f"Error: {error}\n")
+        print(f"Registered {person.name} (admin ID {person.admin_id}).")
+    elif args.command == "add-doctor":
         try:
             doctor = opd.doctors.add(args.name, args.medical_id, Department(args.department))
         except ValueError as error:

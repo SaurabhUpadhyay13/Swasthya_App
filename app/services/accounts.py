@@ -17,6 +17,7 @@ from threading import RLock
 from app.db import utc_now
 from app.errors import api_error
 from app.schemas.accounts import Staff
+from app.schemas.admin import Admin, StaffMember
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS staff (
@@ -24,6 +25,15 @@ CREATE TABLE IF NOT EXISTS staff (
     name       TEXT NOT NULL COLLATE NOCASE,
     staff_id   TEXT NOT NULL UNIQUE COLLATE NOCASE,
     created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS admins (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    admin_id        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash   TEXT NOT NULL,               -- salt$scrypt hash, never the password
+    failed_attempts INTEGER NOT NULL DEFAULT 0,  -- wrong passwords in a row
+    locked_until    TEXT,                        -- set after too many wrong passwords, UTC
+    created_at      TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS patient_accounts (
     phone         TEXT PRIMARY KEY REFERENCES patients(phone),
@@ -49,14 +59,17 @@ CREATE TABLE IF NOT EXISTS signup_codes (
 );
 CREATE TABLE IF NOT EXISTS account_sessions (
     token_hash TEXT PRIMARY KEY,
-    role       TEXT NOT NULL,                    -- 'staff' or 'patient'
-    subject    TEXT NOT NULL,                    -- staff.id or patients.phone
+    role       TEXT NOT NULL,                    -- 'staff', 'patient' or 'admin'
+    subject    TEXT NOT NULL,                    -- staff.id, admins.id or patients.phone
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL
 );
 """
 
 STAFF_SESSION_HOURS = 12  # roughly one shift
+ADMIN_SESSION_HOURS = 8
+MAX_ADMIN_FAILURES = 5  # wrong passwords in a row before the account is locked
+ADMIN_LOCK_MINUTES = 5
 PATIENT_SESSION_HOURS = 24
 CODE_HOURS = 24
 MAX_CODE_ATTEMPTS = 5
@@ -142,6 +155,11 @@ class StaffStore:
             raise ValueError(f"Staff ID {staff_id} is already registered.") from None
         return Staff(**dict(row))
 
+    def all(self) -> list[StaffMember]:
+        with self._lock:
+            rows = self._conn.execute("SELECT id, name, staff_id, created_at FROM staff ORDER BY name").fetchall()
+        return [StaffMember(**dict(row)) for row in rows]
+
     def login(self, name: str, staff_id: str) -> tuple[str, datetime, Staff] | None:
         with self._lock:
             row = self._conn.execute(
@@ -159,6 +177,65 @@ class StaffStore:
         with self._lock:
             row = self._conn.execute("SELECT * FROM staff WHERE id = ?", (int(subject),)).fetchone()
         return Staff(**dict(row)) if row else None
+
+    def logout(self, token: str) -> None:
+        self._sessions.end(token)
+
+
+class AdminStore:
+    """Hospital administrators. Unlike doctors and staff they log in with an ID *and a password*, because
+    an administrator can see everything and add people. Five wrong passwords in a row lock the account briefly."""
+
+    def __init__(self, conn: sqlite3.Connection, lock: RLock, sessions: Sessions) -> None:
+        self._conn = conn
+        self._lock = lock
+        self._sessions = sessions
+
+    def add(self, name: str, admin_id: str, password: str) -> Admin:
+        """Register an administrator (python -m app.cli add-admin)."""
+        if len(password) < 8:
+            raise ValueError("The password must be at least 8 characters.")
+        try:
+            with self._lock, self._conn:
+                cursor = self._conn.execute(
+                    "INSERT INTO admins (name, admin_id, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                    (_clean(name), _clean(admin_id), hash_password(password), utc_now()),
+                )
+                row = self._conn.execute("SELECT id, name, admin_id FROM admins WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        except sqlite3.IntegrityError:
+            raise ValueError(f"Admin ID {admin_id} is already registered.") from None
+        return Admin(**dict(row))
+
+    def login(self, admin_id: str, password: str) -> tuple[str, datetime, Admin] | None:
+        with self._lock, self._conn:
+            row = self._conn.execute("SELECT * FROM admins WHERE admin_id = ?", (_clean(admin_id),)).fetchone()
+            if row and row["locked_until"] and row["locked_until"] > utc_now():
+                raise api_error(429, "too_many_attempts", "Too many wrong passwords. Please try again in a few minutes.")
+            ok = check_password(password, row["password_hash"] if row else _DUMMY_HASH) and row is not None
+            if not ok:
+                if row:
+                    failures = row["failed_attempts"] + 1
+                    locked = None
+                    if failures >= MAX_ADMIN_FAILURES:
+                        failures = 0
+                        locked = (datetime.now(timezone.utc) + timedelta(minutes=ADMIN_LOCK_MINUTES)).isoformat(
+                            timespec="microseconds"
+                        )
+                    self._conn.execute(
+                        "UPDATE admins SET failed_attempts = ?, locked_until = ? WHERE id = ?", (failures, locked, row["id"])
+                    )
+                return None
+            self._conn.execute("UPDATE admins SET failed_attempts = 0, locked_until = NULL WHERE id = ?", (row["id"],))
+        token, expires_at = self._sessions.start("admin", str(row["id"]), ADMIN_SESSION_HOURS)
+        return token, expires_at, Admin(id=row["id"], name=row["name"], admin_id=row["admin_id"])
+
+    def from_session(self, token: str) -> Admin | None:
+        subject = self._sessions.subject("admin", token)
+        if subject is None:
+            return None
+        with self._lock:
+            row = self._conn.execute("SELECT id, name, admin_id FROM admins WHERE id = ?", (int(subject),)).fetchone()
+        return Admin(**dict(row)) if row else None
 
     def logout(self, token: str) -> None:
         self._sessions.end(token)

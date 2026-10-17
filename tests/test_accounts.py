@@ -56,11 +56,11 @@ def test_staff_wrong_credentials_give_the_same_error(client, staff, name, staff_
     assert response.json()["error"] == {"code": "invalid_credentials", "message": "Name or staff ID not recognised."}
 
 
-def test_staff_endpoints_need_a_login(client, staff):
-    assert client.get("/staff/dashboard").json()["error"]["code"] == "not_authenticated"
+def test_staff_endpoints_need_a_login(client, anon, staff):
+    assert anon.get("/staff/dashboard").json()["error"]["code"] == "not_authenticated"
     bad = client.get("/staff/dashboard", headers={"Authorization": "Bearer nope"})
     assert bad.status_code == 401 and bad.json()["error"]["code"] == "session_expired"
-    assert client.post("/staff/patient-codes", json={"phone": PHONE}).status_code == 401
+    assert anon.post("/staff/patient-codes", json={"phone": PHONE}).status_code == 401
 
 
 def test_staff_logout_ends_the_session(client, staff_auth):

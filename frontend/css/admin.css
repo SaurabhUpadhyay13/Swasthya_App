@@ -1,0 +1,100 @@
+/* Login screen, administrator dashboard and the doctors and staff page. Uses the tokens from styles.css. */
+
+/* ---- Welcome (role chooser) ---- */
+.welcome { max-width: 980px; margin: 0 auto; padding: 8px 0 40px; text-align: center; }
+.eyebrow { display: inline-block; padding: 5px 14px; border-radius: 999px; background: var(--mint); color: var(--teal); font-size: 13px; font-weight: 700; }
+.welcome h2 { margin-top: 14px; font-size: 38px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+.welcome > p { margin-top: 8px; color: var(--ink-2); font-size: 17px; }
+.role-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px; margin: 34px 0 26px; text-align: left; }
+.role-card {
+  position: relative; display: grid; align-content: start; gap: 8px; padding: 24px 22px 20px;
+  background: var(--card); border: 1.5px solid transparent; border-radius: 20px; box-shadow: var(--shadow);
+  transition: transform 0.25s var(--ease-out), border-color 0.2s, box-shadow 0.25s;
+  animation: role-in 0.5s var(--ease-out) both; animation-delay: calc(var(--i) * 70ms);
+}
+.role-card:hover, .role-card:focus-visible { transform: translateY(-5px); border-color: var(--mint); box-shadow: 0 18px 38px -18px rgba(12, 43, 60, 0.4); }
+.role-card strong { font-size: 19px; letter-spacing: -0.01em; }
+.role-card .muted { font-size: 14px; line-height: 1.45; min-height: 62px; }
+.role-icon { display: grid; place-items: center; width: 50px; height: 50px; margin-bottom: 6px; border-radius: 15px; background: var(--mint-2); color: var(--teal); }
+.role-icon svg { width: 26px; height: 26px; }
+.role-go { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; font-weight: 700; color: var(--teal); }
+.role-go svg { width: 18px; height: 18px; transition: transform 0.2s var(--ease-out); }
+.role-card:hover .role-go svg { transform: translateX(4px); }
+@keyframes role-in { from { opacity: 0; transform: translateY(14px); } }
+.fine { max-width: 640px; margin: 0 auto; line-height: 1.5; }
+.acc-login .fine { margin: 14px 0 0; }
+.acc-login code { padding: 1px 6px; border-radius: 6px; background: var(--paper); font-size: 12.5px; }
+
+/* ---- Tables ---- */
+.pp-layout > *, .adm-pair > *, .adm-trio > *, .adm-card { min-width: 0; }
+.table-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.table { width: 100%; border-collapse: collapse; }
+.table th { padding: 8px 10px; text-align: left; font-size: 12.5px; font-weight: 700; color: var(--ink-3); border-bottom: 1.5px solid var(--line); white-space: nowrap; }
+.table td { padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.table tr:last-child td { border-bottom: 0; }
+.table td strong, .table td .muted { display: block; }
+.table td:first-child, .table th:first-child { min-width: 170px; }
+.table .num { text-align: right; font-weight: 700; white-space: nowrap; }
+.table th.num { text-align: right; }
+.presence { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-3); }
+.presence::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #c3d1d6; }
+.presence.on { color: var(--green); }
+.presence.on::before { background: var(--green); box-shadow: 0 0 0 4px var(--green-bg); }
+.more-link { display: inline-block; margin-top: 10px; font-weight: 700; color: var(--teal); }
+.more-link:hover { text-decoration: underline; }
+
+/* ---- Administrator dashboard ---- */
+.adm-pair { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 22px; margin-top: 30px; align-items: start; }
+.adm-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
+.adm-card h3 { font-size: 15px; font-weight: 700; }
+.adm-card h3.sub { margin-top: 16px; }
+.adm-card .side-head { margin-bottom: 0; }
+.adm-card .empty a { color: var(--teal); font-weight: 700; }
+
+.bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: end; height: 190px; padding-top: 6px; }
+.bar-col { display: grid; grid-template-rows: auto 1fr auto; gap: 6px; height: 100%; justify-items: center; }
+.bar-val { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.bar-track { display: flex; align-items: flex-end; width: 100%; max-width: 38px; height: 100%; }
+.bar { width: 100%; height: var(--h); min-height: 4px; border-radius: 8px 8px 4px 4px; background: var(--mint); transform-origin: bottom; animation: grow 0.7s var(--ease-out) both; transition: background 0.2s; }
+.bar.now { background: var(--teal-2); }
+.bar-col:hover .bar { background: var(--teal-2); }
+.bar-label { font-size: 12px; color: var(--ink-3); font-weight: 600; }
+@keyframes grow { from { transform: scaleY(0); } }
+.mini-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.mini-stats li, .tiles li { display: grid; gap: 2px; padding: 12px 14px; border-radius: 14px; background: var(--paper); }
+.mini-stats b, .tiles b { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+.mini-stats span, .tiles span { font-size: 12.5px; color: var(--ink-3); }
+
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tiles li.bad { background: var(--coral-bg); }
+.tiles li.bad b { color: var(--coral); }
+.adm-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; margin-top: 4px; }
+.adm-trio > div { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.adm-trio .doc-list li { grid-template-columns: minmax(0, 1fr) auto; }
+.adm-trio .muted { margin: 0; }
+.pipe { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.pipe li { display: grid; gap: 2px; }
+.pipe b { font-size: 20px; font-weight: 800; line-height: 1.1; }
+.pipe .muted { font-size: 12px; }
+.pipe-bar { display: block; height: 6px; margin-bottom: 4px; border-radius: 99px; background: linear-gradient(90deg, var(--teal-2) var(--w), var(--line) var(--w)); }
+
+.feed { display: grid; }
+.feed li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--line); }
+.feed li:last-child { border-bottom: 0; }
+.feed .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--teal-2); }
+.feed .dot.ev-stock { background: var(--amber); }
+
+/* ---- Doctors and staff page ---- */
+.pp-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 22px; align-items: start; }
+.pp-layout .card .form { margin-top: 4px; }
+.pp-search { max-width: 340px; }
+
+@media (max-width: 1100px) {
+  .adm-pair, .pp-layout, .adm-trio { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .welcome h2 { font-size: 30px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .feed li { grid-template-columns: auto minmax(0, 1fr); }
+  .feed li .muted { grid-column: 2; }
+}

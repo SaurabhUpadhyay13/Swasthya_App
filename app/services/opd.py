@@ -16,13 +16,14 @@ A patient's visits are found through the phone number, because the token number
 """
 
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 from threading import RLock
 
 from fastapi import Depends
 
 from app.config import Settings, get_settings
-from app.db import connect, utc_now
+from app.db import connect, start_of_day_utc, utc_now
 from app.errors import api_error
 from app.schemas.accounts import PatientDashboard, PatientProfile
 from app.schemas.doctors import Consultation, ConsultationSave, Doctor, PrescriptionItem, Visit
@@ -36,7 +37,7 @@ from app.schemas.opd import (
     TokenStatus,
 )
 from app.services.accounts import SCHEMA as ACCOUNT_SCHEMA
-from app.services.accounts import PatientAccounts, Sessions, StaffStore
+from app.services.accounts import AdminStore, PatientAccounts, Sessions, StaffStore
 from app.services.doctors import SCHEMA as DOCTOR_SCHEMA
 from app.services.doctors import DoctorStore
 from app.services.work_orders import WorkOrderStore, get_work_order_store
@@ -136,6 +137,7 @@ class OpdStore:
         self.doctors = DoctorStore(self._conn, self._lock)
         sessions = Sessions(self._conn, self._lock)
         self.staff = StaffStore(self._conn, self._lock, sessions)
+        self.admins = AdminStore(self._conn, self._lock, sessions)
         self.patient_accounts = PatientAccounts(self._conn, self._lock, sessions)
 
     def _to_token(self, row) -> Token:
@@ -303,6 +305,92 @@ class OpdStore:
                 (since, since),
             ).fetchone()
         return dict(row)
+
+    def admin_overview(self) -> dict:
+        """Numbers for the administrator's dashboard: today, the last 7 days, every doctor's activity and a feed.
+
+        The medicine side (stock, work orders) lives in the other database and is added by the router.
+        """
+        since, now = start_of_day_utc(), utc_now()
+        with self._lock:
+            c = self._conn
+            today = dict(c.execute(
+                "SELECT COALESCE(SUM(registered_at >= :s), 0) AS registered,"
+                "       COALESCE(SUM(status = 'waiting'), 0) AS waiting,"
+                "       COALESCE(SUM(status = 'in_consultation'), 0) AS in_consultation,"
+                "       COALESCE(SUM(status = 'completed' AND updated_at >= :s), 0) AS completed,"
+                "       COALESCE(SUM(status = 'cancelled' AND updated_at >= :s), 0) AS cancelled"
+                " FROM opd_tokens", {"s": since}).fetchone())
+            today["average_wait_minutes"] = c.execute(
+                "SELECT ROUND(AVG((julianday(e.first_call) - julianday(t.registered_at)) * 1440), 1)"
+                " FROM opd_tokens t JOIN (SELECT token, MIN(occurred_at) AS first_call FROM opd_events"
+                "                         WHERE to_status = 'in_consultation' GROUP BY token) e ON e.token = t.token"
+                " WHERE t.registered_at >= ?", (since,)).fetchone()[0]
+
+            totals = {
+                "patients": c.execute("SELECT COUNT(*) FROM patients").fetchone()[0],
+                "visits": c.execute("SELECT COUNT(*) FROM opd_tokens").fetchone()[0],
+                "doctors": c.execute("SELECT COUNT(*) FROM doctors").fetchone()[0],
+                "staff": c.execute("SELECT COUNT(*) FROM staff").fetchone()[0],
+            }
+
+            # Visits per local day, oldest first. Grouped in Python so "day" means the hospital's local day.
+            first_day = start_of_day_utc(6)
+            counts: dict[str, int] = {}
+            for row in c.execute("SELECT registered_at FROM opd_tokens WHERE registered_at >= ?", (first_day,)):
+                day = datetime.fromisoformat(row[0]).astimezone().date().isoformat()
+                counts[day] = counts.get(day, 0) + 1
+            today_local = datetime.now().astimezone().date()
+            days = [(today_local - timedelta(days=n)).isoformat() for n in range(6, -1, -1)]
+            series = [{"date": day, "visits": counts.get(day, 0)} for day in days]
+
+            waiting_by_department = {
+                row["department"]: row["n"]
+                for row in c.execute("SELECT department, COUNT(*) AS n FROM opd_tokens WHERE status = 'waiting' GROUP BY department")
+            }
+            doctor_rows = c.execute(
+                "SELECT d.id, d.name, d.medical_id, d.department,"
+                "  (SELECT COUNT(*) FROM consultations x WHERE x.doctor_id = d.id AND x.created_at >= :s) AS seen_today,"
+                "  (SELECT COUNT(*) FROM consultations x WHERE x.doctor_id = d.id) AS seen_total,"
+                "  (SELECT COUNT(*) FROM prescription_items p JOIN consultations x ON x.token = p.token"
+                "    WHERE x.doctor_id = d.id AND p.prescribed_at >= :s) AS prescribed_today,"
+                "  (SELECT MAX(x.updated_at) FROM consultations x WHERE x.doctor_id = d.id) AS last_consultation,"
+                "  (SELECT MAX(s.created_at) FROM doctor_sessions s WHERE s.doctor_id = d.id AND s.expires_at > :n) AS online_since"
+                " FROM doctors d ORDER BY d.name", {"s": since, "n": now}).fetchall()
+            dispensed = c.execute(
+                "SELECT medicine_name AS medicine, SUM(dispensed_quantity) AS quantity FROM prescription_items"
+                " WHERE dispensed_at >= ? AND dispensed_quantity > 0 GROUP BY medicine_name ORDER BY quantity DESC, medicine_name",
+                (since,)).fetchall()
+            events = c.execute(
+                "SELECT token, department, from_status, to_status, occurred_at FROM opd_events ORDER BY id DESC LIMIT 10"
+            ).fetchall()
+            departments = self.departments()
+            staff = self.staff.all()
+
+        doctors = []
+        for row in doctor_rows:
+            last_seen = [t for t in (row["last_consultation"], row["online_since"]) if t]
+            doctors.append({
+                "id": row["id"], "name": row["name"], "medical_id": row["medical_id"], "department": row["department"],
+                "department_name": DEPARTMENTS[Department(row["department"])][0],
+                "online": row["online_since"] is not None,
+                "seen_today": row["seen_today"], "seen_total": row["seen_total"], "prescribed_today": row["prescribed_today"],
+                "last_active_at": max(last_seen) if last_seen else None,
+                "waiting_in_department": waiting_by_department.get(row["department"], 0),
+            })
+        # Online first, then busiest today: the admin's eye goes to who is working now.
+        doctors.sort(key=lambda d: (not d["online"], -d["seen_today"], d["name"].lower()))
+
+        feed = []
+        for e in events:
+            name = DEPARTMENTS[Department(e["department"])][0]
+            step = "was issued" if e["from_status"] is None else f"moved to {e['to_status'].replace('_', ' ')}"
+            feed.append({"at": e["occurred_at"], "kind": "opd", "text": f"Token {e['token']} {step} ({name})"})
+        return {
+            "today": today, "totals": totals, "visits_last_7_days": series, "departments": departments,
+            "doctors": doctors, "staff": staff,
+            "dispensed_today": [dict(r) for r in dispensed], "opd_feed": feed,
+        }
 
     def patient_dashboard(self, phone: str) -> PatientDashboard:
         """Everything one patient may see: their live token, live queues and their visit history (by phone)."""
